@@ -18,12 +18,15 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,6 +64,11 @@ private data class NavEntry(val destination: Destination, val icon: ImageVector)
 private fun MainScaffold(viewModel: RoonViewModel) {
     var selected by remember { mutableStateOf(Destination.NowPlaying) }
     val activeZone by viewModel.activeZone.collectAsState()
+    val firstNavFocus = remember { FocusRequester() }
+
+    // Give the controller a focus anchor on the nav rail when the app opens, so the first
+    // D-pad press does something instead of being swallowed by an unfocused tree.
+    LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
 
     val entries = listOf(
         NavEntry(Destination.NowPlaying, Icons.Filled.PlayCircle),
@@ -82,11 +90,12 @@ private fun MainScaffold(viewModel: RoonViewModel) {
         ) {
             Text("Roon Shield", color = RoonAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
-            entries.forEach { entry ->
+            entries.forEachIndexed { index, entry ->
                 NavRailItem(
                     label = entry.destination.label,
                     icon = entry.icon,
                     selected = selected == entry.destination,
+                    modifier = if (index == 0) Modifier.focusRequester(firstNavFocus) else Modifier,
                     onClick = { selected = entry.destination },
                 )
             }

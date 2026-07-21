@@ -59,6 +59,21 @@ See [`PLAN.md`](./PLAN.md) for the design.
 
 ## Status
 
-v1 implemented and building; APK produced; unit tests green. End-to-end verification against a live
-Roon Core (pair → browse → play → transport/queue) is the remaining manual step — see
-[`PLAN.md`](./PLAN.md) "Verification".
+v1 implemented, builds + installs, unit tests (MOO codec + SOOD) green. **Not yet run against a live
+Roon Core** — that's the remaining manual step.
+
+### On-device verification checklist (watch points)
+
+The client protocol was implemented from the `node-roon-api` reference; verify these when you first
+drive it on the Shield with a real Core:
+
+1. **Connect** — discovery finds your Core (or use manual entry); after **Enable** in Roon Settings →
+   Extensions the app reaches "Connected" and lists zones. (Cleartext `ws://` is enabled in the
+   manifest + network-security-config — required, since Android blocks it by default.)
+2. **Controller focus** — first D-pad press lands on the nav rail; moving right enters content and
+   lists are navigable. If any screen feels "dead," add a `FocusRequester` to its first list item
+   (the nav-rail anchor is already in place).
+3. **Register/transport** — confirm `com.roonlabs.transport:2` control/seek/volume actually move the
+   zone (service versions are pinned in `RoonExtension.kt`).
+4. **Browse/search** — the browse()/load() drill-down and the search `input` flow may need small
+   field tweaks against the live wire format.

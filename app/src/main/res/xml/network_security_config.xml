@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Roon's Extension API is plaintext WebSocket (ws://<core>:<port>/api) on the local network.
+  Android blocks cleartext by default since API 28, which would break every connection attempt.
+  This LAN-only sideloaded remote permits cleartext so it can reach the Core.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
