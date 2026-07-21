@@ -49,6 +49,7 @@ fun AlbumArt(
     imageKey: String?,
     sizePx: Int,
     modifier: Modifier = Modifier,
+    showPlaceholder: Boolean = true,
     fetch: suspend (String, Int, Int) -> ByteArray?,
 ) {
     val image by produceState<ImageBitmap?>(initialValue = null, imageKey, sizePx) {
@@ -56,17 +57,17 @@ fun AlbumArt(
             ?.takeIf { it.isNotEmpty() }
             ?.let { AlbumArtCache.get(it, sizePx, sizePx, fetch) }
     }
-    Box(modifier = modifier.background(RoonSurfaceVariant), contentAlignment = Alignment.Center) {
+    val bg = if (showPlaceholder) RoonSurfaceVariant else androidx.compose.ui.graphics.Color.Transparent
+    Box(modifier = modifier.background(bg), contentAlignment = Alignment.Center) {
         val img = image
-        if (img != null) {
-            Image(
+        when {
+            img != null -> Image(
                 bitmap = img,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
-            Icon(
+            showPlaceholder -> Icon(
                 imageVector = Icons.Filled.MusicNote,
                 contentDescription = null,
                 tint = RoonTextSecondary,

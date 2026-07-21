@@ -27,32 +27,49 @@ data class DiscoveredCore(
 class SoodDiscovery {
 
     suspend fun discover(timeoutMs: Long = 3000L): List<DiscoveredCore> = withContext(Dispatchers.IO) {
+        val started = System.currentTimeMillis()
+        RoonLog.d(AREA, "discover() start, window=${timeoutMs}ms")
         val results = LinkedHashMap<String, DiscoveredCore>()
         val group = InetAddress.getByName(MULTICAST_GROUP)
-        DatagramSocket().use { socket ->
-            socket.broadcast = true
-            socket.soTimeout = RECV_POLL_MS
-            val query = encodeQuery()
-            // Send a couple of times to survive packet loss.
-            repeat(2) {
-                runCatching {
-                    socket.send(DatagramPacket(query, query.size, group, SOOD_PORT))
+        try {
+            DatagramSocket().use { socket ->
+                socket.broadcast = true
+                socket.soTimeout = RECV_POLL_MS
+                val query = encodeQuery()
+                // Send a couple of times to survive packet loss.
+                repeat(2) {
+                    runCatching {
+                        socket.send(DatagramPacket(query, query.size, group, SOOD_PORT))
+                    }.onFailure { RoonLog.w(AREA, "query send failed: ${it.message}") }
                 }
-            }
-            val deadline = System.currentTimeMillis() + timeoutMs
-            val buf = ByteArray(2048)
-            while (System.currentTimeMillis() < deadline) {
-                val packet = DatagramPacket(buf, buf.size)
-                try {
-                    socket.receive(packet)
-                } catch (_: SocketTimeoutException) {
-                    continue
-                } catch (_: Exception) {
-                    break
+                RoonLog.v(AREA, "SOOD query sent to $MULTICAST_GROUP:$SOOD_PORT (${query.size} bytes)")
+                var packets = 0
+                val deadline = System.currentTimeMillis() + timeoutMs
+                val buf = ByteArray(2048)
+                while (System.currentTimeMillis() < deadline) {
+                    val packet = DatagramPacket(buf, buf.size)
+                    try {
+                        socket.receive(packet)
+                        packets++
+                    } catch (_: SocketTimeoutException) {
+                        continue
+                    } catch (e: Exception) {
+                        RoonLog.w(AREA, "receive error: ${e.message}")
+                        break
+                    }
+                    val core = parseResponse(packet)
+                    if (core != null) {
+                        val isNew = !results.containsKey(core.coreId)
+                        results[core.coreId] = core
+                        if (isNew) RoonLog.i(AREA, "found Core '${core.name}' @ ${core.host}:${core.port} (Roon ${core.displayVersion})")
+                    } else {
+                        RoonLog.v(AREA, "ignored packet from ${packet.address?.hostAddress} (${packet.length} bytes)")
+                    }
                 }
-                val core = parseResponse(packet) ?: continue
-                results[core.coreId] = core
+                RoonLog.d(AREA, "discover() done in ${System.currentTimeMillis() - started}ms: ${results.size} core(s), $packets packet(s)")
             }
+        } catch (e: Exception) {
+            RoonLog.e(AREA, "discover() failed: ${e.message}", e)
         }
         results.values.toList()
     }
@@ -124,6 +141,7 @@ class SoodDiscovery {
     }
 
     companion object {
+        private const val AREA = "SOOD"
         private const val MULTICAST_GROUP = "239.255.90.90"
         private const val SOOD_PORT = 9003
         private const val SOOD_VERSION: Byte = 2

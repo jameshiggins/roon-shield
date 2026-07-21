@@ -24,6 +24,8 @@ import okio.ByteString
 import okio.ByteString.Companion.toByteString
 import java.util.concurrent.TimeUnit
 
+private const val AREA = "Core"
+
 sealed interface ConnectionState {
     data object Idle : ConnectionState
     data object Discovering : ConnectionState
@@ -67,13 +69,16 @@ class RoonCore(
         .build()
 
     fun connect(host: String, port: Int) {
+        RoonLog.i(AREA, "connect($host:$port)")
         manualClose = false
+        reconnectAttempts = 0
         this.host = host
         this.port = port
         openSocket()
     }
 
     fun disconnect() {
+        RoonLog.i(AREA, "disconnect() requested")
         manualClose = true
         webSocket?.close(1000, "client closing")
         webSocket = null
@@ -83,15 +88,19 @@ class RoonCore(
     }
 
     private fun openSocket() {
+        val url = "ws://$host:$port/api"
+        RoonLog.d(AREA, "opening WebSocket $url (attempt ${reconnectAttempts + 1})")
         _state.value = ConnectionState.Connecting(host)
-        val request = Request.Builder().url("ws://$host:$port/api").build()
+        val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, listener)
     }
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(ws: WebSocket, response: Response) {
+            RoonLog.i(AREA, "WebSocket open")
             val transport = object : MooTransport {
                 override fun send(bytes: ByteArray) {
+                    RoonLog.v(AREA, "-> ${bytes.size}b: ${bytes.decodeToString().substringBefore('\n')}")
                     ws.send(bytes.toByteString())
                 }
                 override fun close() {
@@ -106,7 +115,9 @@ class RoonCore(
         }
 
         override fun onMessage(ws: WebSocket, bytes: ByteString) {
-            moo?.onMessage(bytes.toByteArray())
+            val ba = bytes.toByteArray()
+            RoonLog.v(AREA, "<- ${ba.size}b: ${ba.decodeToString().substringBefore('\n')}")
+            moo?.onMessage(ba)
         }
 
         override fun onMessage(ws: WebSocket, text: String) {
@@ -114,11 +125,11 @@ class RoonCore(
         }
 
         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-            handleDrop(t.message ?: "connection failed")
+            handleDrop("failure: ${t.message}")
         }
 
         override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-            handleDrop("closed: $reason")
+            handleDrop("closed[$code]: $reason")
         }
     }
 
@@ -127,6 +138,7 @@ class RoonCore(
         moo = null
         onUnpaired?.invoke()
         if (manualClose) {
+            RoonLog.d(AREA, "dropped after manual close ($message)")
             _state.value = ConnectionState.Idle
             return
         }
@@ -134,6 +146,7 @@ class RoonCore(
         scope.launch {
             val backoff = (1000L * (1 shl reconnectAttempts.coerceAtMost(4))).coerceAtMost(15000L)
             reconnectAttempts++
+            RoonLog.w(AREA, "connection dropped ($message); reconnect in ${backoff}ms (attempt $reconnectAttempts)")
             delay(backoff)
             if (!manualClose) openSocket()
         }
@@ -145,6 +158,7 @@ class RoonCore(
             // for silent reconnect before sending /register.
             val infoJson = info.bodyText?.let { runCatching { RoonJson.parseToJsonElement(it).jsonObject }.getOrNull() }
             coreId = infoJson?.get("core_id")?.jsonPrimitive?.content
+            RoonLog.d(AREA, "registry/info: coreId=$coreId")
             scope.launch { register(m) }
             false
         }
@@ -154,6 +168,7 @@ class RoonCore(
         // Look up any persisted token keyed by the core id learned from /info.
         val token = coreId?.let { prefs.getToken(it) }
         val body = buildRegisterBody(token)
+        RoonLog.i(AREA, "sending register (token=${if (token != null) "present" else "none"})")
         _state.value = ConnectionState.WaitingForAuthorization
         m.sendRequest(name = "${RoonExtension.SVC_REGISTRY}/register", body = body) { msg ->
             when (msg.name) {
@@ -171,6 +186,7 @@ class RoonCore(
         val id = bodyJson?.get("core_id")?.jsonPrimitive?.content
         val token = bodyJson?.get("token")?.jsonPrimitive?.content
         val name = bodyJson?.get("display_name")?.jsonPrimitive?.content ?: "Roon Core"
+        RoonLog.i(AREA, "Registered with core '$name' (coreId=$id, token=${if (token != null) "received" else "none"})")
         if (id != null) {
             coreId = id
             scope.launch {
@@ -192,6 +208,7 @@ class RoonCore(
                 m.sendResponse(msg.requestId, MooMessage.VERB_COMPLETE, "Success")
             }
             msg.name == "${RoonExtension.SVC_STATUS}/subscribe_status" -> {
+                RoonLog.d(AREA, "core subscribed to our status")
                 statusRequestId = msg.requestId
                 m.sendResponse(
                     msg.requestId,

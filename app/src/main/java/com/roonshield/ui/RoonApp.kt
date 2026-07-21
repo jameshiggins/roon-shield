@@ -16,7 +16,6 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,6 +23,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -36,24 +37,38 @@ import com.roonshield.roon.ConnectionState
 import com.roonshield.ui.browse.BrowseScreen
 import com.roonshield.ui.browse.SearchScreen
 import com.roonshield.ui.components.NavRailItem
+import com.roonshield.ui.components.RoonLogo
 import com.roonshield.ui.connect.ConnectScreen
 import com.roonshield.ui.nowplaying.NowPlayingScreen
 import com.roonshield.ui.queue.QueueScreen
 import com.roonshield.ui.theme.RoonAccent
 import com.roonshield.ui.theme.RoonBackground
 import com.roonshield.ui.theme.RoonSurface
+import com.roonshield.ui.theme.RoonTextPrimary
 import com.roonshield.ui.theme.RoonTextSecondary
-import com.roonshield.ui.zones.ZonePickerScreen
 
 @Composable
 fun RoonApp(viewModel: RoonViewModel) {
     val connection by viewModel.connectionState.collectAsState()
+    val booting by viewModel.booting.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize().background(RoonBackground)) {
-        if (connection is ConnectionState.Connected) {
-            MainScaffold(viewModel)
-        } else {
-            ConnectScreen(viewModel)
+        when {
+            connection is ConnectionState.Connected -> MainScaffold(viewModel)
+            // Show a splash (not the discovery screen) while the silent reconnect runs.
+            booting && connection is ConnectionState.Idle -> BootSplash()
+            else -> ConnectScreen(viewModel)
+        }
+    }
+}
+
+@Composable
+private fun BootSplash() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            RoonLogo(height = 40.dp, tint = RoonTextPrimary)
+            Spacer(Modifier.height(20.dp))
+            CircularProgressIndicator(color = RoonAccent, modifier = Modifier.height(24.dp).width(24.dp))
         }
     }
 }
@@ -75,7 +90,6 @@ private fun MainScaffold(viewModel: RoonViewModel) {
         NavEntry(Destination.Browse, Icons.Filled.LibraryMusic),
         NavEntry(Destination.Search, Icons.Filled.Search),
         NavEntry(Destination.Queue, Icons.AutoMirrored.Filled.QueueMusic),
-        NavEntry(Destination.Zones, Icons.Filled.Speaker),
     )
 
     Row(modifier = Modifier.fillMaxSize()) {
@@ -88,7 +102,7 @@ private fun MainScaffold(viewModel: RoonViewModel) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("Roon Shield", color = RoonAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            RoonLogo(height = 22.dp, tint = RoonTextPrimary)
             Spacer(Modifier.height(16.dp))
             entries.forEachIndexed { index, entry ->
                 NavRailItem(
@@ -114,7 +128,6 @@ private fun MainScaffold(viewModel: RoonViewModel) {
                 Destination.Browse -> BrowseScreen(viewModel)
                 Destination.Search -> SearchScreen(viewModel)
                 Destination.Queue -> QueueScreen(viewModel)
-                Destination.Zones -> ZonePickerScreen(viewModel)
             }
         }
     }

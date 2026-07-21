@@ -2,6 +2,8 @@ package com.roonshield.roon.services
 
 import com.roonshield.roon.RoonExtension
 import com.roonshield.roon.RoonJson
+import com.roonshield.roon.RoonLog
+import com.roonshield.roon.ZoneReducer
 import com.roonshield.roon.model.QueueChanged
 import com.roonshield.roon.model.QueueItem
 import com.roonshield.roon.model.QueueResponse
@@ -29,21 +31,18 @@ class RoonTransport(private val moo: Moo) {
         val id = moo.sendRequest("${RoonExtension.SVC_TRANSPORT}/subscribe_zones", body) { msg ->
             when (msg.name) {
                 "Subscribed" -> {
-                    val resp = decode<ZonesResponse>(msg.bodyText)
+                    val resp = decode<ZonesResponse>(msg.bodyText) ?: ZonesResponse()
                     zones.clear()
-                    resp?.zones?.forEach { zones[it.zoneId] = it }
+                    zones.putAll(ZoneReducer.subscribed(resp))
+                    RoonLog.i("Zones", "subscribed: ${zones.size} zone(s): ${zones.values.map { it.displayName }}")
                     trySend(zones.values.toList())
                 }
                 "Changed" -> {
                     val ch = decode<ZonesChanged>(msg.bodyText) ?: return@sendRequest true
-                    ch.zonesRemoved.forEach { zones.remove(it) }
-                    ch.zonesAdded.forEach { zones[it.zoneId] = it }
-                    ch.zonesChanged.forEach { zones[it.zoneId] = it }
-                    ch.zonesSeekChanged.forEach { sc ->
-                        val z = zones[sc.zoneId] ?: return@forEach
-                        val np = z.nowPlaying?.copy(seekPosition = sc.seekPosition ?: z.nowPlaying.seekPosition)
-                        zones[sc.zoneId] = z.copy(nowPlaying = np)
+                    if (ch.zonesAdded.isNotEmpty() || ch.zonesChanged.isNotEmpty() || ch.zonesRemoved.isNotEmpty()) {
+                        RoonLog.v("Zones", "changed: +${ch.zonesAdded.size} ~${ch.zonesChanged.size} -${ch.zonesRemoved.size} seek=${ch.zonesSeekChanged.size}")
                     }
+                    ZoneReducer.applyChanged(zones, ch)
                     trySend(zones.values.toList())
                 }
             }

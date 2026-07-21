@@ -1,53 +1,64 @@
 package com.roonshield.ui.nowplaying
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.VolumeDown
-import androidx.compose.material.icons.filled.VolumeMute
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Text
 import com.roonshield.roon.model.Zone
 import com.roonshield.ui.RoonViewModel
 import com.roonshield.ui.components.AlbumArt
 import com.roonshield.ui.components.TransportButton
+import com.roonshield.ui.components.onFocusState
 import com.roonshield.ui.theme.RoonAccent
-import com.roonshield.ui.theme.RoonSurfaceVariant
 import com.roonshield.ui.theme.RoonTextPrimary
 import com.roonshield.ui.theme.RoonTextSecondary
 
 @Composable
 fun NowPlayingScreen(viewModel: RoonViewModel, modifier: Modifier = Modifier) {
     val zone by viewModel.activeZone.collectAsState()
-
     if (zone == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No zone selected. Open Zones to pick an output.", color = RoonTextSecondary, fontSize = 16.sp)
@@ -64,92 +75,149 @@ private fun NowPlayingContent(zone: Zone, viewModel: RoonViewModel, modifier: Mo
     val title = lines?.line1 ?: "Nothing playing"
     val artist = lines?.line2
     val album = lines?.line3
-    val output = zone.outputs.firstOrNull()
-    val muted = output?.volume?.isMuted == true
+    val settings = zone.settings
 
-    Row(modifier = modifier.fillMaxSize().padding(40.dp)) {
-        // Album art
+    Box(modifier = modifier.fillMaxSize()) {
+        // Blurred album-art backdrop (a tiny image stretched up + dark scrim), the Roon look.
+        AlbumArt(
+            imageKey = np?.imageKey,
+            sizePx = 64,
+            showPlaceholder = false,
+            fetch = viewModel::loadArt,
+            modifier = Modifier.fillMaxSize(),
+        )
         Box(
-            modifier = Modifier
-                .fillMaxWidth(0.42f)
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(16.dp)),
-        ) {
-            AlbumArt(
-                imageKey = np?.imageKey,
-                sizePx = 720,
-                fetch = viewModel::loadArt,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+            modifier = Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(Color(0xE60B0C10), Color(0xF20B0C10))),
+            ),
+        )
 
-        Spacer(Modifier.width(40.dp))
-
-        // Metadata + controls
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-            Text(
-                text = zone.displayName ?: "Zone",
-                color = RoonAccent,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(title, color = RoonTextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (!artist.isNullOrEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Text(artist, color = RoonTextPrimary, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (!album.isNullOrEmpty()) {
-                Spacer(Modifier.height(2.dp))
-                Text(album, color = RoonTextSecondary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-
-            Spacer(Modifier.height(24.dp))
-            SeekBar(position = np?.seekPosition ?: 0, length = np?.length ?: 0)
-
-            Spacer(Modifier.height(24.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                TransportButton(Icons.Filled.Replay10, "Back 10 seconds", size = 48, onClick = { viewModel.seekBy(-10) })
-                TransportButton(Icons.Filled.SkipPrevious, "Previous", onClick = viewModel::previous)
-                TransportButton(
-                    icon = if (zone.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = "Play/Pause",
-                    size = 72,
-                    onClick = viewModel::playPause,
+        Row(modifier = Modifier.fillMaxSize().padding(56.dp)) {
+            // Crisp cover
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight(0.86f)
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                AlbumArt(
+                    imageKey = np?.imageKey,
+                    sizePx = 800,
+                    fetch = viewModel::loadArt,
+                    modifier = Modifier.fillMaxSize(),
                 )
-                TransportButton(Icons.Filled.SkipNext, "Next", onClick = viewModel::next)
-                TransportButton(Icons.Filled.Forward10, "Forward 10 seconds", size = 48, onClick = { viewModel.seekBy(10) })
             }
 
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                TransportButton(Icons.Filled.VolumeDown, "Volume down", size = 44, onClick = viewModel::volumeDown)
-                TransportButton(
-                    icon = if (muted) Icons.Filled.VolumeMute else Icons.Filled.VolumeUp,
-                    contentDescription = "Mute",
-                    size = 44,
-                    onClick = viewModel::toggleMute,
+            Spacer(Modifier.width(48.dp))
+
+            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+                Text(
+                    text = (zone.displayName ?: "Zone").uppercase(),
+                    color = RoonAccent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
                 )
-                TransportButton(Icons.Filled.VolumeUp, "Volume up", size = 44, onClick = viewModel::volumeUp)
+                Spacer(Modifier.height(18.dp))
+                Text(title, color = RoonTextPrimary, fontSize = 40.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 46.sp)
+                if (!artist.isNullOrEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(artist, color = RoonTextPrimary.copy(alpha = 0.9f), fontSize = 24.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (!album.isNullOrEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(album, color = RoonTextSecondary, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+
+                Spacer(Modifier.height(28.dp))
+                Scrubber(
+                    position = np?.seekPosition ?: 0,
+                    length = np?.length ?: 0,
+                    onSeek = viewModel::seekBy,
+                    onPlayPause = viewModel::playPause,
+                )
+
+                Spacer(Modifier.height(24.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    TransportButton(
+                        icon = Icons.Filled.Shuffle,
+                        contentDescription = "Shuffle",
+                        size = 46,
+                        active = settings?.shuffle == true,
+                        onClick = viewModel::toggleShuffle,
+                    )
+                    TransportButton(Icons.Filled.SkipPrevious, "Previous", size = 56, onClick = viewModel::previous)
+                    TransportButton(
+                        icon = if (zone.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = "Play/Pause",
+                        size = 76,
+                        filled = true,
+                        onClick = viewModel::playPause,
+                    )
+                    TransportButton(Icons.Filled.SkipNext, "Next", size = 56, onClick = viewModel::next)
+                    val loop = settings?.loop
+                    TransportButton(
+                        icon = if (loop == "loop_one") Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                        contentDescription = "Repeat",
+                        size = 46,
+                        active = loop == "loop" || loop == "loop_one",
+                        onClick = viewModel::cycleLoop,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TransportButton(
+                        icon = Icons.Filled.Radio,
+                        contentDescription = "Roon Radio",
+                        size = 46,
+                        active = settings?.autoRadio == true,
+                        onClick = viewModel::toggleRadio,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SeekBar(position: Int, length: Int) {
+private fun Scrubber(position: Int, length: Int, onSeek: (Int) -> Unit, onPlayPause: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     val progress = if (length > 0) (position.toFloat() / length).coerceIn(0f, 1f) else 0f
-    Column(modifier = Modifier.fillMaxWidth(0.9f)) {
-        LinearProgressIndicator(
-            progress = { progress },
-            color = RoonAccent,
-            trackColor = RoonSurfaceVariant,
-            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-        )
-        Spacer(Modifier.height(6.dp))
+
+    Column(modifier = Modifier.fillMaxWidth(0.92f)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (focused) 10.dp else 6.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.16f))
+                .onFocusState { focused = it }
+                .focusable()
+                .onKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    when (ev.key) {
+                        Key.DirectionLeft -> { onSeek(-10); true }
+                        Key.DirectionRight -> { onSeek(10); true }
+                        Key.DirectionCenter, Key.Enter -> { onPlayPause(); true }
+                        else -> false
+                    }
+                },
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(if (focused) RoonAccent else RoonTextPrimary),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatTime(position), color = RoonTextSecondary, fontSize = 12.sp)
-            Text(formatTime(length), color = RoonTextSecondary, fontSize = 12.sp)
+            Text(formatTime(position), color = RoonTextSecondary, fontSize = 13.sp)
+            Text(
+                text = if (focused) "◀ / ▶ seek" else "-" + formatTime((length - position).coerceAtLeast(0)),
+                color = if (focused) RoonAccent else RoonTextSecondary,
+                fontSize = 13.sp,
+            )
         }
     }
 }

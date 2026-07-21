@@ -66,12 +66,14 @@ class RoonRepository(context: Context) {
         core.onPaired = {
             val m = core.moo
             if (m != null) {
+                RoonLog.i("Repo", "paired — wiring transport/browse/image services")
                 browse = RoonBrowse(m)
                 image = RoonImage(m)
                 transportFlow.value = RoonTransport(m)
             }
         }
         core.onUnpaired = {
+            RoonLog.i("Repo", "unpaired — tearing down services")
             transportFlow.value = null
             browse = null
             image = null
@@ -116,6 +118,7 @@ class RoonRepository(context: Context) {
         val fallback = restored
             ?: list.firstOrNull { it.isPlaying }
             ?: list.firstOrNull()
+        RoonLog.d("Repo", "active zone -> ${fallback?.displayName} (${fallback?.zoneId})")
         _activeZoneId.value = fallback?.zoneId
     }
 
@@ -144,6 +147,23 @@ class RoonRepository(context: Context) {
         val output = z.outputs.firstOrNull() ?: return@withTransportZone
         val muted = output.volume?.isMuted == true
         t.mute(output.outputId, !muted)
+    }
+
+    fun toggleShuffle() = withTransportZone { t, z ->
+        t.changeSettings(z.zoneId, shuffle = !(z.settings?.shuffle ?: false))
+    }
+
+    fun toggleRadio() = withTransportZone { t, z ->
+        t.changeSettings(z.zoneId, autoRadio = !(z.settings?.autoRadio ?: false))
+    }
+
+    fun cycleLoop() = withTransportZone { t, z ->
+        val next = when (z.settings?.loop) {
+            "loop" -> "loop_one"
+            "loop_one" -> "disabled"
+            else -> "loop"
+        }
+        t.changeSettings(z.zoneId, loop = next)
     }
 
     fun playFromQueue(queueItemId: Long) = withTransportZone { t, z -> t.playFromHere(z.zoneId, queueItemId) }

@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,12 +25,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roonshield.roon.ConnectionState
 import com.roonshield.ui.RoonViewModel
 import com.roonshield.ui.components.RoonListItem
+import com.roonshield.ui.components.RoonLogo
 import com.roonshield.ui.components.TransportButton
 import com.roonshield.ui.theme.RoonAccent
 import com.roonshield.ui.theme.RoonTextPrimary
@@ -42,17 +45,24 @@ import androidx.compose.material.icons.filled.Refresh
 fun ConnectScreen(viewModel: RoonViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.connectionState.collectAsState()
     val cores by viewModel.discovered.collectAsState()
+    val firstCoreFocus = remember { FocusRequester() }
 
-    // Kick off discovery when this screen first appears.
-    LaunchedEffect(Unit) { viewModel.discover() }
+    // Only scan when we're actually idle/errored — never while connecting or already paired.
+    // (Prevents a spurious SOOD scan racing a silent reconnect.)
+    val shouldDiscover = state is ConnectionState.Idle || state is ConnectionState.Error
+    LaunchedEffect(shouldDiscover) { if (shouldDiscover) viewModel.discover() }
+    // Focus the first discovered Core so a single center-press connects.
+    LaunchedEffect(cores.isNotEmpty()) {
+        if (cores.isNotEmpty()) runCatching { firstCoreFocus.requestFocus() }
+    }
 
     Box(modifier = modifier.fillMaxSize().padding(48.dp), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.widthIn(max = 720.dp),
         ) {
-            Text("Roon Shield", color = RoonAccent, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
+            RoonLogo(height = 46.dp, tint = RoonTextPrimary)
+            Spacer(Modifier.height(10.dp))
 
             when (val s = state) {
                 is ConnectionState.WaitingForAuthorization -> AuthorizationPanel()
@@ -86,10 +96,11 @@ fun ConnectScreen(viewModel: RoonViewModel, modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().height(220.dp),
                 ) {
-                    items(cores, key = { it.coreId }) { core ->
+                    itemsIndexed(cores, key = { _, c -> c.coreId }) { index, core ->
                         RoonListItem(
                             title = core.name,
                             subtitle = "${core.host}:${core.port}  ·  Roon ${core.displayVersion}",
+                            modifier = if (index == 0) Modifier.focusRequester(firstCoreFocus) else Modifier,
                             onClick = { viewModel.connectDiscovered(core) },
                         )
                     }

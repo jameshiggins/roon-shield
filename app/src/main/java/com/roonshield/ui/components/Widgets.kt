@@ -112,9 +112,22 @@ fun TransportButton(
     contentDescription: String,
     modifier: Modifier = Modifier,
     size: Int = 56,
+    active: Boolean = false,
+    filled: Boolean = false,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val bg = when {
+        focused -> RoonAccent
+        filled -> RoonTextPrimary
+        else -> Color.Transparent
+    }
+    val tint = when {
+        focused -> Color.White
+        filled -> RoonSurface
+        active -> RoonAccent
+        else -> RoonTextPrimary
+    }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -124,14 +137,14 @@ fun TransportButton(
                 scaleY = if (focused) 1.12f else 1f
             }
             .clip(CircleShape)
-            .background(if (focused) RoonAccent else RoonSurfaceVariant)
+            .background(bg)
             .onFocusState { focused = it }
             .clickable(onClick = onClick),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = if (focused) Color.White else RoonTextPrimary,
+            tint = tint,
             modifier = Modifier.size((size / 2).dp),
         )
     }
