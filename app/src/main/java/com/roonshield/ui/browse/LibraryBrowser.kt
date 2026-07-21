@@ -136,6 +136,24 @@ fun LibraryBrowser(
     val page = stack.lastOrNull()
     val atRoot = stack.size <= 1
 
+    // Load-more paging: Roon lists can be thousands of items; we load a window and append on demand.
+    val extra = remember(sessionKey) { mutableStateListOf<BrowseItem>() }
+    var loadingMore by remember(sessionKey) { mutableStateOf(false) }
+    LaunchedEffect(stack.size, sheetStack.size) { extra.clear(); loadingMore = false }
+    val baseItems = page?.items ?: emptyList()
+    val items = if (extra.isEmpty()) baseItems else baseItems + extra
+    val canLoadMore = page != null && items.size < page.totalCount
+    fun loadMore() {
+        val p = page ?: return
+        if (loadingMore || items.size >= p.totalCount) return
+        loadingMore = true
+        scope.launch {
+            val more = runCatching { session.page(items.size, 100) }.getOrNull().orEmpty()
+            extra.addAll(more)
+            loadingMore = false
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -148,13 +166,12 @@ fun LibraryBrowser(
             }
             Spacer(Modifier.height(12.dp))
 
-            val items = page?.items ?: emptyList()
             if (items.isEmpty() && !loading) {
                 Text(page?.message ?: "Nothing here.", color = RoonTextSecondary, fontSize = 14.sp)
             } else if (!atRoot && !BrowseHeuristics.looksLikeGrid(items)) {
-                DetailView(page, items, viewModel, firstFocus, ::open)
+                DetailView(page, items, viewModel, firstFocus, canLoadMore, ::loadMore, ::open)
             } else {
-                GridView(items, if (atRoot) style else LibraryStyle.Grid, viewModel, if (atRoot) header else null, firstFocus, ::open)
+                GridView(items, if (atRoot) style else LibraryStyle.Grid, viewModel, if (atRoot) header else null, firstFocus, canLoadMore, ::loadMore, ::open)
             }
         }
 
@@ -206,6 +223,8 @@ private fun GridView(
     viewModel: RoonViewModel,
     header: (@Composable () -> Unit)?,
     firstFocus: FocusRequester,
+    canLoadMore: Boolean,
+    onLoadMore: () -> Unit,
     onOpen: (BrowseItem) -> Unit,
 ) {
     if (style == LibraryStyle.List) {
@@ -218,6 +237,7 @@ private fun GridView(
                     onClick = { onOpen(item) },
                 )
             }
+            if (canLoadMore) item { LoadMoreSentinel(onLoadMore) }
         }
         return
     }
@@ -237,11 +257,21 @@ private fun GridView(
                 PosterCard(item.title, item.subtitle, item.imageKey, viewModel::loadArt, modifier = focusMod, circular = style == LibraryStyle.Circle, onClick = { onOpen(item) })
             }
         }
+        if (canLoadMore) item(span = { GridItemSpan(maxLineSpan) }) { LoadMoreSentinel(onLoadMore) }
+    }
+}
+
+/** When this scrolls into view it requests the next page. */
+@Composable
+private fun LoadMoreSentinel(onLoadMore: () -> Unit) {
+    LaunchedEffect(Unit) { onLoadMore() }
+    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(color = RoonAccent, modifier = Modifier.size(22.dp))
     }
 }
 
 @Composable
-private fun DetailView(page: BrowsePage?, items: List<BrowseItem>, viewModel: RoonViewModel, firstFocus: FocusRequester, onOpen: (BrowseItem) -> Unit) {
+private fun DetailView(page: BrowsePage?, items: List<BrowseItem>, viewModel: RoonViewModel, firstFocus: FocusRequester, canLoadMore: Boolean, onLoadMore: () -> Unit, onOpen: (BrowseItem) -> Unit) {
     val actions = items.filter { it.hint == "action" || it.hint == "action_list" }
     val rows = items.filter { it.hint != "action" && it.hint != "action_list" }
     val headerImage = page?.list?.imageKey ?: items.firstOrNull { !it.imageKey.isNullOrEmpty() }?.imageKey
@@ -286,6 +316,7 @@ private fun DetailView(page: BrowsePage?, items: List<BrowseItem>, viewModel: Ro
                 onClick = { onOpen(row) },
             )
         }
+        if (canLoadMore) item { LoadMoreSentinel(onLoadMore) }
     }
 }
 
