@@ -34,19 +34,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.roonshield.roon.ConnectionState
-import com.roonshield.ui.browse.SearchScreen
+import com.roonshield.ui.albums.AlbumsScreen
+import com.roonshield.ui.artists.ArtistsScreen
 import com.roonshield.ui.components.BrowsePane
 import com.roonshield.ui.components.BrowseStyle
 import com.roonshield.ui.components.NavRailItem
 import com.roonshield.ui.components.NowPlayingBar
 import com.roonshield.ui.components.RoonLogo
+import com.roonshield.ui.composers.ComposersScreen
 import com.roonshield.ui.connect.ConnectScreen
+import com.roonshield.ui.genres.GenresScreen
 import com.roonshield.ui.home.HomeScreen
-import com.roonshield.ui.nowplaying.NowPlayingScreen
-import com.roonshield.ui.queue.QueueScreen
+import com.roonshield.ui.nowplaying.NowPlayingScreenV2
+import com.roonshield.ui.playlists.PlaylistsScreen
+import com.roonshield.ui.queue.QueueScreenV2
+import com.roonshield.ui.radio.RadioScreen
+import com.roonshield.ui.search.SearchScreenV2
+import com.roonshield.ui.settings.SettingsScreen
 import com.roonshield.ui.theme.RoonAccent
 import com.roonshield.ui.theme.RoonBackground
 import com.roonshield.ui.theme.RoonSurface
@@ -102,6 +110,8 @@ private fun MainScaffold(viewModel: RoonViewModel) {
     val activeZone by viewModel.activeZone.collectAsState()
     val zones by viewModel.zones.collectAsState()
     val activeZoneId by viewModel.activeZoneId.collectAsState()
+    val firstNavFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
@@ -117,11 +127,12 @@ private fun MainScaffold(viewModel: RoonViewModel) {
             ) {
                 RoonLogo(height = 22.dp, tint = RoonTextPrimary)
                 Spacer(Modifier.height(14.dp))
-                NAV_ITEMS.forEach { item ->
+                NAV_ITEMS.forEachIndexed { index, item ->
                     NavRailItem(
                         label = item.label,
                         icon = item.icon,
                         selected = selected == item.id,
+                        modifier = if (index == 0) Modifier.focusRequester(firstNavFocus) else Modifier,
                         onClick = { selected = item.id },
                     )
                 }
@@ -162,16 +173,16 @@ private fun MainScaffold(viewModel: RoonViewModel) {
 private fun Content(selected: String, viewModel: RoonViewModel, onSelect: (String) -> Unit) {
     when (selected) {
         "home" -> HomeScreen(viewModel, onNavigate = onSelect)
-        "albums" -> BrowsePane(viewModel, sessionKey = "albums", rootHierarchy = "albums", style = BrowseStyle.Grid, rootTitle = "Albums")
-        "artists" -> BrowsePane(viewModel, sessionKey = "artists", rootHierarchy = "artists", style = BrowseStyle.Circle, rootTitle = "Artists")
-        "genres" -> BrowsePane(viewModel, sessionKey = "genres", rootHierarchy = "genres", style = BrowseStyle.Grid, rootTitle = "Genres")
-        "composers" -> BrowsePane(viewModel, sessionKey = "composers", rootHierarchy = "composers", style = BrowseStyle.Circle, rootTitle = "Composers")
-        "playlists" -> BrowsePane(viewModel, sessionKey = "playlists", rootHierarchy = "playlists", style = BrowseStyle.List, rootTitle = "Playlists")
-        "radio" -> BrowsePane(viewModel, sessionKey = "radio", rootHierarchy = "internet_radio", style = BrowseStyle.List, rootTitle = "Live Radio")
+        "albums" -> AlbumsScreen(viewModel)
+        "artists" -> ArtistsScreen(viewModel)
+        "genres" -> GenresScreen(viewModel)
+        "composers" -> ComposersScreen(viewModel)
+        "playlists" -> PlaylistsScreen(viewModel)
+        "radio" -> RadioScreen(viewModel)
         "browse" -> BrowsePane(viewModel, sessionKey = "browse", rootHierarchy = "browse", style = BrowseStyle.Grid, rootTitle = "Browse")
-        "search" -> SearchScreen(viewModel)
-        "queue" -> QueueScreen(viewModel)
-        "settings" -> BrowsePane(viewModel, sessionKey = "settings", rootHierarchy = "settings", style = BrowseStyle.List, rootTitle = "Settings")
-        "nowplaying" -> NowPlayingScreen(viewModel)
+        "search" -> SearchScreenV2(viewModel)
+        "queue" -> QueueScreenV2(viewModel)
+        "settings" -> SettingsScreen(viewModel)
+        "nowplaying" -> NowPlayingScreenV2(viewModel)
     }
 }

@@ -2,6 +2,7 @@ package com.roonshield
 
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -15,6 +16,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A remote should stay awake while it's on screen (no screensaver interrupting playback control).
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             RoonShieldTheme {
                 RoonApp(viewModel)
