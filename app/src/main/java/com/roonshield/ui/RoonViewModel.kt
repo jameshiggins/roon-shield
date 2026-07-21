@@ -32,9 +32,6 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     val queue = repo.queue
     val discovered = repo.discoveredCores
 
-    val library = BrowseController(repo, viewModelScope, rootHierarchy = "browse")
-    val search = BrowseController(repo, viewModelScope, rootHierarchy = "search")
-
     /** True only during the initial silent-reconnect window, so the UI shows a splash instead of
      *  flashing the discovery screen (and kicking off a needless SOOD scan) while we reconnect. */
     private val _booting = MutableStateFlow(true)

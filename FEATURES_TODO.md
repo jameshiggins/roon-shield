@@ -1,45 +1,36 @@
-# Roon Shield — Next feature backlog (paused, per user)
+# Roon Shield — feature backlog / status
 
-Dev paused so the Shield is free for Plex. No deploys / no force-stopping Plex until resumed.
+Autonomous build toward native-Roon parity + production quality. We implement equivalent
+functionality from Roon's public Extension API in our own Roon-styled UI (no copyrighted assets).
 
-> Approach note: we implement **equivalent functionality from Roon's public Extension API** and render
-> it in our own Roon-styled UI — we do not copy/reproduce the official app's proprietary screens pixel
-> for pixel. Match behavior, not copyrighted assets.
+## Done
+- **Play Next / Add to Queue / Play Now / Start Radio / Shuffle** — via the native-style **action
+  sheet** (`LibraryBrowser` + `ActionSheet`). Renders whatever actions Roon returns for the item.
+- **Listen Later** — app-local, persisted (`RoonPrefs` DataStore); "Add to Listen Later" on every
+  action sheet; a Listen Later screen + nav + Home tile; entries re-resolve via Search.
+- **Unified LibraryBrowser** — one browse surface for all hierarchies (grid/circle/tile/list + detail),
+  per-level first-item auto-focus, focus-grouped nav rail.
+- **Stable connection** — generation-guarded reconnect (fixed the reconnect loop).
+- Discovery/pairing, Now Playing, Queue, Search, Zones/volume footer, silent reconnect, keep-screen-on.
 
-## 1. Stream path & quality (Now Playing)
-- Show the current stream's **format / quality** on Now Playing (e.g. codec, sample rate/bit depth,
-  lossless / hi-res indicator, and the signal-path quality state if exposed).
-- **Doc research needed first:** confirm what the Extension API actually exposes. The Transport
-  `subscribe_zones` zone `now_playing` object is the candidate; the full DSP "signal path" chain and
-  the colored quality dot may be internal-only. Read node-roon-api transport service + inspect a live
-  zone payload (we already log full MOO frames — capture a `subscribe_zones` "Subscribed"/"Changed"
-  body and see which format/quality fields are present).
-- Implement what's available; if signal path isn't exposed, show format/quality that is and note the gap.
+## Won't do (hard Roon public-API limitations, documented in README)
+- **Stream path / format / quality readout.** Confirmed absent from the Extension API's Transport
+  `now_playing` (no codec / sample-rate / bit-depth / signal-path fields in `node-roon-api-transport`).
+  Cannot be reproduced without RAAT/partner access. Not faked.
+- **Play-to-this-device** (Shield as a Roon endpoint) — needs RAAT / Roon Ready (partner-only).
 
-## 2. Play Next / Add to Queue  (largely already available)
-- Roon's Browse **action lists** already include actions like Play Now, **Play Next / Add Next**,
-  **Add to Queue / Queue**, Start Radio, Add to Library when you open a track/album. Our BrowseSession
-  drills into these today.
-- Work: surface them as **first-class buttons** and add a **context menu** (controller MENU button, or
-  a dedicated "…" affordance) on any focused track/album/artist that opens its action list, so Play
-  Next / Add to Queue are one press away instead of buried.
-- Wire MENU key (KEYCODE_MENU / gamepad) at the item level to invoke the action list.
+## Remaining polish (next passes)
+- **Context menu via MENU / gamepad-X key** on a focused item (currently the action sheet opens on
+  click/select — a dedicated MENU key would match the native long-press affordance).
+- **Focus trapping at edges** — `focusGroup` reduces D-pad escaping to the launcher; consider
+  `FocusProperties { up/left = Cancel }` on rail/content edges to fully trap it.
+- **Load-more / paging** for very large lists (currently loads up to ~200 items per level).
+- **Now Playing**: lyrics if/when exposed; richer metadata line from `now_playing` three-line.
+- **Listen Later**: smarter re-resolve (store artist separately for better search matching).
+- **Release build**: signing config + R8/proguard pass + faster cold start (debug first-frame is slow
+  on the Shield).
+- **Instrumented UI tests** for the browse/action-sheet flows (unit tests cover the pure logic today).
 
-## 3. Listen Later
-- Roon exposes **Tags / bookmarks**. "Listen Later" = either a dedicated tag or a saved-for-later flow.
-- **Doc research needed:** whether tags/bookmarks are creatable/settable via the Extension Browse API
-  (action-list items such as "Add to Tag") or only readable. If the action list offers a tag/bookmark
-  action, expose a "Listen Later" button that applies it; add a "Listen Later" browse entry (Tags /
-  Bookmarks hierarchy) to view them.
-- Fallback if API can't set tags: maintain an app-local "Listen Later" list (persist item refs) — but
-  note item_keys are session-scoped, so store durable identifiers (title/artist) or re-resolve.
-
-## Docs to read on resume
-- node-roon-api Transport service (zone / now_playing fields for format/quality).
-- node-roon-api Browse service (action lists: play_next/add_next, queue, tags/bookmarks).
-- Capture a live `subscribe_zones` body from our own MOO logs to see real field names.
-
-## Verification (on resume, when Shield is free again)
-- Now Playing shows format/quality for a playing track.
-- On a focused track: MENU opens actions; Play Next and Add to Queue work (verify queue order changes).
-- Listen Later adds an item and it appears in a Listen Later view.
+## Verification (live, on the Shield)
+- Home renders; drilling a genre shows detail (Play chip + sub-rows); the action sheet opens with
+  Shuffle / Start Radio / Add to Listen Later; the Listen Later entry persists to the datastore. ✓

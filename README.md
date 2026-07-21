@@ -2,78 +2,69 @@
 
 A native **Android TV** app for the **Nvidia Shield** that acts as a **Roon remote**, redesigned for
 the Shield game controller / D-pad. It controls existing Roon output zones via Roon's official
-**Extension API** (WebSocket + MOO protocol) — browse, search, now-playing, transport, and queue.
+**Extension API** (WebSocket + MOO protocol) with a Roon-styled, controller-first UI.
 
-> **Scope:** control-only remote for *existing* Roon endpoints. It cannot make the Shield itself a
-> Roon playback zone (that needs RAAT / "Roon Ready," which is partner-only and not in the public API).
+> **Scope:** control-only remote for *existing* Roon endpoints. See **API limitations** below.
 
-See [`PLAN.md`](./PLAN.md) for the design.
-
-## Features (v1)
+## Features
 
 - **Discovery & pairing** — finds Roon Cores on the LAN via SOOD; one-time "Enable" in Roon Settings.
-  Manual host:port entry as a fallback. Token is persisted for silent reconnect.
-- **Now Playing** — album art, track/artist/album, seek bar, play/pause, prev/next, ±10s seek,
-  volume up/down, mute.
-- **Browse & Search** — the full Roon library hierarchy (artists/albums/genres/playlists…) and search;
-  select items to drill in and play (Play Now / Queue etc. via Roon's action lists).
-- **Queue** — view upcoming tracks and play from any point.
-- **Zones** — pick the active output zone.
-- **Controller mapping** — D-pad focus navigation; media keys + gamepad Y (play/pause), L1/R1
-  (prev/next), FF/RW keys all handled globally.
+  Manual host:port entry fallback. Token persisted for **silent reconnect** on launch.
+- **Home** — quick-access tiles + the Roon browse root, all drillable.
+- **Browse everything** — Albums, Artists, Genres, Composers, Playlists, Live Radio, plus the generic
+  Browse tree — through one unified browser with grid / circular / color-tile / list layouts and
+  album/artist/playlist **detail** pages (header art, Play actions, track lists).
+- **Action sheet** — selecting a track/album/genre opens a native-style sheet with the actions Roon
+  provides: **Play Now / Play Next / Add to Queue / Start Radio / Shuffle** (+ **Add to Listen Later**).
+- **Search** — full Roon search with categorized results.
+- **Queue** — now-playing pin, stats, play-from-here, transport + shuffle/repeat.
+- **Now Playing** — blurred album backdrop, large type, a focusable D-pad scrubber, shuffle / prev /
+  play / next / repeat / Roon Radio, and an **Up Next** panel.
+- **Listen Later** — app-local bookmarks (persisted); entries re-resolve via Search.
+- **Zones & volume** — a footer bar with a zone/volume overlay (switch active zone, adjust volume/mute).
+- **Controller mapping** — D-pad focus (per-level auto-focus, focus-grouped rail); global media keys +
+  gamepad Y (play/pause), L1/R1 (prev/next), FF/RW; keep-screen-on so the Shield daydream won't steal
+  focus while the remote is on screen.
+
+## API limitations (by design of Roon's public API — not app gaps)
+
+- **No "play to this device":** the Shield can't be made a Roon playback endpoint (needs RAAT /
+  "Roon Ready", partner-only, not in the public API). The app controls *other* Roon zones.
+- **No stream path / format / quality:** the Extension API's Transport `now_playing` object exposes
+  **no** codec, sample-rate, bit-depth, or signal-path fields (confirmed in `node-roon-api-transport`).
+  So the signal-path / quality readout from the official app can't be reproduced here.
 
 ## Architecture
 
-- `app/src/main/java/com/roonshield/roon/` — pure-Kotlin Roon client (JVM-unit-testable):
-  `moo/` MOO wire codec + dispatcher, `SoodDiscovery`, `RoonCore` (connect/register/token),
-  `services/` Transport/Browse/Image, `RoonRepository` (StateFlows).
-- `app/src/main/java/com/roonshield/ui/` — Jetpack **Compose for TV** UI + `RoonViewModel`.
-- `app/src/test/` — MOO codec + SOOD parsing unit tests.
+- `app/src/main/java/com/roonshield/roon/` — pure-Kotlin Roon client (JVM-unit-testable): `moo/` MOO
+  wire codec + dispatcher, `SoodDiscovery`, `RoonCore` (connect/register/token, generation-guarded
+  reconnect), `services/` Transport/Browse/Image, `RoonRepository` (StateFlows), `BrowseSession`
+  (isolated per-screen cursors via `multi_session_key`), `BrowseHeuristics`, `RoonPrefs` (DataStore).
+- `app/src/main/java/com/roonshield/ui/` — Jetpack **Compose for TV**: `RoonApp` (nav rail + footer +
+  zone overlay), `browse/LibraryBrowser` (the one browse surface + action sheet), plus Home / Search /
+  Queue / Now Playing / Listen Later / Settings / Connect screens and shared `components/`.
+- `app/src/test/` — MOO codec, SOOD parsing, ZoneReducer, model JSON, ReconnectPolicy, MOO dispatch,
+  BrowseHeuristics, and ListenLater serialization unit tests.
 
 ## Prerequisites
 
-- JDK 17, Android SDK (platform 34, build-tools 34.0.0). This machine: SDK at `C:\Android`
-  (see `local.properties`).
-- A Roon Core running on the same network.
+- JDK 17, Android SDK (platform 34, build-tools 34.0.0). This machine: SDK at `C:\Android`.
+- A Roon Core on the same network.
 
-## Build & test
+## Build, test, deploy
 
 ```powershell
 ./gradlew.bat assembleDebug        # -> app/build/outputs/apk/debug/app-debug.apk
-./gradlew.bat testDebugUnitTest    # MOO + SOOD unit tests
+./gradlew.bat testDebugUnitTest    # all JVM unit tests
+./scripts/deploy.ps1 -ShieldIp <shield-ip>   # adb connect + build + install + launch
 ```
 
-## Sideload to the Shield (wireless ADB)
-
-1. On the Shield: Settings → Device Preferences → About → tap **Build** 7× (unlocks Developer
-   options), then enable **Network debugging**. Note the Shield's IP.
-2. From this repo:
-
-   ```powershell
-   ./scripts/deploy.ps1 -ShieldIp <shield-ip>
-   ```
-
-   This runs `adb connect`, builds, installs, and launches the app.
-3. **First run only:** in any Roon remote, open **Settings → Extensions** and click **Enable** next to
-   **Roon Shield**. The app then connects and lists your zones.
+**First run only:** in any Roon remote open **Settings → Extensions** and click **Enable** next to
+**Roon Shield**. The app then connects and lists your zones (subsequent launches reconnect silently).
 
 ## Status
 
-v1 implemented, builds + installs, unit tests (MOO codec + SOOD) green. **Not yet run against a live
-Roon Core** — that's the remaining manual step.
-
-### On-device verification checklist (watch points)
-
-The client protocol was implemented from the `node-roon-api` reference; verify these when you first
-drive it on the Shield with a real Core:
-
-1. **Connect** — discovery finds your Core (or use manual entry); after **Enable** in Roon Settings →
-   Extensions the app reaches "Connected" and lists zones. (Cleartext `ws://` is enabled in the
-   manifest + network-security-config — required, since Android blocks it by default.)
-2. **Controller focus** — first D-pad press lands on the nav rail; moving right enters content and
-   lists are navigable. If any screen feels "dead," add a `FocusRequester` to its first list item
-   (the nav-rail anchor is already in place).
-3. **Register/transport** — confirm `com.roonlabs.transport:2` control/seek/volume actually move the
-   zone (service versions are pinned in `RoonExtension.kt`).
-4. **Browse/search** — the browse()/load() drill-down and the search `input` flow may need small
-   field tweaks against the live wire format.
+Runs on the Nvidia Shield against a live Roon Core: silent reconnect, browse with real library data,
+action sheet (Play Next / Add to Queue / Start Radio / Shuffle), Listen Later, now-playing, zones,
+persistent footer. A stable single connection (generation-guarded reconnect). See
+[`FEATURES_TODO.md`](./FEATURES_TODO.md) for remaining polish.

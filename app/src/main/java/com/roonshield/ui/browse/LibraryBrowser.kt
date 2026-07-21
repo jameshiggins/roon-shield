@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.roonshield.roon.BrowseHeuristics
 import com.roonshield.roon.BrowsePage
 import com.roonshield.roon.BrowseSession
 import com.roonshield.roon.model.BrowseItem
@@ -110,7 +111,7 @@ fun LibraryBrowser(
         scope.launch {
             loading = true
             val page = session.open(k)
-            if (isActionList(page)) { sheetAnchor = item; sheetStack.add(page) } else { stack.add(page) }
+            if (BrowseHeuristics.isActionList(page.items)) { sheetAnchor = item; sheetStack.add(page) } else { stack.add(page) }
             loading = false
         }
     }
@@ -118,7 +119,7 @@ fun LibraryBrowser(
         scope.launch {
             loading = true
             val res = session.open(action.itemKey ?: "")
-            if (isActionList(res)) sheetStack.add(res) else { toast = action.title ?: "Done"; repeat(sheetStack.size) { session.back() }; sheetStack.clear(); sheetAnchor = null }
+            if (BrowseHeuristics.isActionList(res.items)) sheetStack.add(res) else { toast = action.title ?: "Done"; repeat(sheetStack.size) { session.back() }; sheetStack.clear(); sheetAnchor = null }
             loading = false
         }
     }
@@ -150,7 +151,7 @@ fun LibraryBrowser(
             val items = page?.items ?: emptyList()
             if (items.isEmpty() && !loading) {
                 Text(page?.message ?: "Nothing here.", color = RoonTextSecondary, fontSize = 14.sp)
-            } else if (!atRoot && !looksLikeGrid(items)) {
+            } else if (!atRoot && !BrowseHeuristics.looksLikeGrid(items)) {
                 DetailView(page, items, viewModel, firstFocus, ::open)
             } else {
                 GridView(items, if (atRoot) style else LibraryStyle.Grid, viewModel, if (atRoot) header else null, firstFocus, ::open)
@@ -166,7 +167,22 @@ fun LibraryBrowser(
                 actions = sheetStack.last().items,
                 extraActions = listOf(SheetAction("listen_later", "Add to Listen Later", Icons.Filled.WatchLater)),
                 onPick = ::pickAction,
-                onExtra = { sheetAnchor?.let { viewModel.addListenLater(it) }; toast = "Added to Listen Later"; closeSheet() },
+                onExtra = {
+                    val anchor = sheetAnchor
+                    if (anchor != null) {
+                        // If the sheet was opened from a "Play X" action chip, save the thing itself
+                        // (the current level: album/artist/genre) rather than the verb.
+                        val levelTitle = stack.lastOrNull()?.let { it.list?.title ?: it.title }
+                        val effective = if (BrowseHeuristics.isActionVerb(anchor.title) && !levelTitle.isNullOrBlank()) {
+                            anchor.copy(title = levelTitle, subtitle = null, imageKey = anchor.imageKey ?: stack.lastOrNull()?.list?.imageKey)
+                        } else {
+                            anchor
+                        }
+                        viewModel.addListenLater(effective)
+                    }
+                    toast = "Added to Listen Later"
+                    closeSheet()
+                },
                 onDismiss = ::closeSheet,
             )
         }
@@ -314,13 +330,3 @@ private fun ColorTile(name: String, modifier: Modifier = Modifier, onClick: () -
     }
 }
 
-private fun isActionList(page: BrowsePage): Boolean =
-    page.items.isNotEmpty() && page.items.all { it.hint == "action" || it.hint == "action_list" }
-
-/** A deeper level "looks like a grid" (albums/artists) rather than a detail (tracks/sections). */
-private fun looksLikeGrid(items: List<BrowseItem>): Boolean {
-    if (items.isEmpty()) return false
-    if (items.any { it.hint == "action" || it.hint == "action_list" }) return false
-    val withArt = items.count { !it.imageKey.isNullOrEmpty() }
-    return withArt * 2 >= items.size
-}
