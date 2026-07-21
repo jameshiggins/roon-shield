@@ -4,6 +4,7 @@ import com.roonshield.roon.moo.Moo
 import com.roonshield.roon.moo.MooMessage
 import com.roonshield.roon.moo.MooTransport
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +26,14 @@ import okio.ByteString.Companion.toByteString
 import java.util.concurrent.TimeUnit
 
 private const val AREA = "Core"
+
+/** Exponential reconnect backoff, capped — pure so it can be unit-tested. */
+object ReconnectPolicy {
+    const val BASE_MS = 1000L
+    const val MAX_MS = 15000L
+    fun backoffMs(attempt: Int): Long =
+        (BASE_MS * (1L shl attempt.coerceIn(0, 4))).coerceAtMost(MAX_MS)
+}
 
 sealed interface ConnectionState {
     data object Idle : ConnectionState
@@ -62,6 +71,10 @@ class RoonCore(
     private var statusRequestId: Int? = null
     @Volatile private var manualClose = false
     @Volatile private var reconnectAttempts = 0
+    /** Monotonic id of the current socket. Callbacks from an older generation are ignored so a
+     *  stale socket's failure can never tear down a newer, healthy connection. */
+    @Volatile private var generation = 0
+    private var reconnectJob: Job? = null
 
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
@@ -72,6 +85,7 @@ class RoonCore(
         RoonLog.i(AREA, "connect($host:$port)")
         manualClose = false
         reconnectAttempts = 0
+        reconnectJob?.cancel()
         this.host = host
         this.port = port
         openSocket()
@@ -80,7 +94,9 @@ class RoonCore(
     fun disconnect() {
         RoonLog.i(AREA, "disconnect() requested")
         manualClose = true
-        webSocket?.close(1000, "client closing")
+        reconnectJob?.cancel()
+        generation++ // invalidate any in-flight socket callbacks
+        webSocket?.let { runCatching { it.cancel() } }
         webSocket = null
         moo?.clear()
         moo = null
@@ -88,16 +104,25 @@ class RoonCore(
     }
 
     private fun openSocket() {
+        // Invalidate the previous socket first so its late callbacks are ignored, and close it.
+        generation++
+        val gen = generation
+        webSocket?.let { runCatching { it.cancel() } }
+        moo?.clear()
+        moo = null
         val url = "ws://$host:$port/api"
-        RoonLog.d(AREA, "opening WebSocket $url (attempt ${reconnectAttempts + 1})")
+        RoonLog.d(AREA, "opening WebSocket $url (gen $gen, attempt ${reconnectAttempts + 1})")
         _state.value = ConnectionState.Connecting(host)
         val request = Request.Builder().url(url).build()
-        webSocket = client.newWebSocket(request, listener)
+        webSocket = client.newWebSocket(request, RoonListener(gen))
     }
 
-    private val listener = object : WebSocketListener() {
+    private inner class RoonListener(private val gen: Int) : WebSocketListener() {
+        private val isCurrent: Boolean get() = gen == generation
+
         override fun onOpen(ws: WebSocket, response: Response) {
-            RoonLog.i(AREA, "WebSocket open")
+            if (!isCurrent) { runCatching { ws.cancel() }; return }
+            RoonLog.i(AREA, "WebSocket open (gen $gen)")
             val transport = object : MooTransport {
                 override fun send(bytes: ByteArray) {
                     RoonLog.v(AREA, "-> ${bytes.size}b: ${bytes.decodeToString().substringBefore('\n')}")
@@ -110,11 +135,11 @@ class RoonCore(
             val m = Moo(transport)
             m.requestHandler = ::handleCoreRequest
             moo = m
-            reconnectAttempts = 0
             sendInfoThenRegister(m)
         }
 
         override fun onMessage(ws: WebSocket, bytes: ByteString) {
+            if (!isCurrent) return
             val ba = bytes.toByteArray()
             RoonLog.v(AREA, "<- ${ba.size}b: ${ba.decodeToString().substringBefore('\n')}")
             moo?.onMessage(ba)
@@ -125,17 +150,24 @@ class RoonCore(
         }
 
         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-            handleDrop("failure: ${t.message}")
+            if (!isCurrent) {
+                RoonLog.d(AREA, "ignoring failure from stale gen $gen (current $generation)")
+                return
+            }
+            handleDrop("failure: ${t.message}", gen)
         }
 
         override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-            handleDrop("closed[$code]: $reason")
+            if (!isCurrent) return
+            handleDrop("closed[$code]: $reason", gen)
         }
     }
 
-    private fun handleDrop(message: String) {
+    private fun handleDrop(message: String, gen: Int) {
+        if (gen != generation) return // stale socket — ignore
         moo?.clear()
         moo = null
+        webSocket = null
         onUnpaired?.invoke()
         if (manualClose) {
             RoonLog.d(AREA, "dropped after manual close ($message)")
@@ -143,12 +175,15 @@ class RoonCore(
             return
         }
         _state.value = ConnectionState.Error(message)
-        scope.launch {
-            val backoff = (1000L * (1 shl reconnectAttempts.coerceAtMost(4))).coerceAtMost(15000L)
+        // Only one pending reconnect at a time.
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            val backoff = ReconnectPolicy.backoffMs(reconnectAttempts)
             reconnectAttempts++
-            RoonLog.w(AREA, "connection dropped ($message); reconnect in ${backoff}ms (attempt $reconnectAttempts)")
+            RoonLog.w(AREA, "connection dropped gen $gen ($message); reconnect in ${backoff}ms (attempt $reconnectAttempts)")
             delay(backoff)
-            if (!manualClose) openSocket()
+            // Skip if a newer socket already came up or the user disconnected.
+            if (!manualClose && gen == generation) openSocket()
         }
     }
 
@@ -187,6 +222,7 @@ class RoonCore(
         val token = bodyJson?.get("token")?.jsonPrimitive?.content
         val name = bodyJson?.get("display_name")?.jsonPrimitive?.content ?: "Roon Core"
         RoonLog.i(AREA, "Registered with core '$name' (coreId=$id, token=${if (token != null) "received" else "none"})")
+        reconnectAttempts = 0 // stable connection reached — reset backoff
         if (id != null) {
             coreId = id
             scope.launch {
