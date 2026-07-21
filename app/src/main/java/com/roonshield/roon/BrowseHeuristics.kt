@@ -9,9 +9,14 @@ import com.roonshield.roon.model.BrowseItem
  */
 object BrowseHeuristics {
 
-    /** A level whose items are all Roon actions (Play Now / Play Next / Queue / …) -> show a sheet. */
+    /**
+     * A terminal action list — all items are `hint == "action"` (Play Now / Play Next / Add to Queue
+     * / Shuffle / Start Radio) — which we present as a popup sheet. A level that merely *contains*
+     * `action_list` items (e.g. an album's tracks, each of which opens to its own actions) is NOT a
+     * sheet; it's a detail/browse level.
+     */
     fun isActionList(items: List<BrowseItem>): Boolean =
-        items.isNotEmpty() && items.all { it.hint == "action" || it.hint == "action_list" }
+        items.isNotEmpty() && items.all { it.hint == "action" }
 
     /** A deeper level that looks like a grid of albums/artists rather than a detail/track list. */
     fun looksLikeGrid(items: List<BrowseItem>): Boolean {

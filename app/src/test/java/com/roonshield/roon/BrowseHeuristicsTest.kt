@@ -11,9 +11,11 @@ class BrowseHeuristicsTest {
         BrowseItem(title = title, subtitle = null, imageKey = image, itemKey = "k_$title", hint = hint)
 
     @Test
-    fun isActionList_trueOnlyWhenAllAreActions() {
-        assertTrue(BrowseHeuristics.isActionList(listOf(item("Play Now", "action"), item("Queue", "action"))))
-        assertTrue(BrowseHeuristics.isActionList(listOf(item("Play Album", "action_list"))))
+    fun isActionList_trueOnlyForTerminalActions() {
+        // Pure terminal actions -> a sheet.
+        assertTrue(BrowseHeuristics.isActionList(listOf(item("Play Now", "action"), item("Add to Queue", "action"))))
+        // A level containing action_list items (e.g. album tracks) is NOT a terminal action sheet.
+        assertFalse(BrowseHeuristics.isActionList(listOf(item("Play Album", "action_list"), item("1. Track", "action_list"))))
         assertFalse(BrowseHeuristics.isActionList(listOf(item("Play Now", "action"), item("Some Track", null))))
         assertFalse(BrowseHeuristics.isActionList(emptyList()))
     }

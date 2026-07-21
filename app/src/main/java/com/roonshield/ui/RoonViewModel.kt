@@ -25,6 +25,9 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = RoonRepository(app)
 
+    /** Optional initial tab (deep-link / testing via `--es start_tab <id>`). */
+    var initialTab: String? = null
+
     val connectionState = repo.connectionState
     val zones = repo.zones
     val activeZone = repo.activeZone

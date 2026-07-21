@@ -139,17 +139,21 @@ fun LibraryBrowser(
     // Load-more paging: Roon lists can be thousands of items; we load a window and append on demand.
     val extra = remember(sessionKey) { mutableStateListOf<BrowseItem>() }
     var loadingMore by remember(sessionKey) { mutableStateOf(false) }
-    LaunchedEffect(stack.size, sheetStack.size) { extra.clear(); loadingMore = false }
+    var reachedEnd by remember(sessionKey) { mutableStateOf(false) }
+    LaunchedEffect(stack.size, sheetStack.size) { extra.clear(); loadingMore = false; reachedEnd = false }
     val baseItems = page?.items ?: emptyList()
     val items = if (extra.isEmpty()) baseItems else baseItems + extra
-    val canLoadMore = page != null && items.size < page.totalCount
+    val canLoadMore = page != null && !reachedEnd && items.size < page.totalCount
     fun loadMore() {
         val p = page ?: return
-        if (loadingMore || items.size >= p.totalCount) return
+        if (loadingMore || reachedEnd || items.size >= p.totalCount) return
         loadingMore = true
         scope.launch {
             val more = runCatching { session.page(items.size, 100) }.getOrNull().orEmpty()
-            extra.addAll(more)
+            // Drop any items we already have (guards against offset overlap -> duplicate keys / loops).
+            val seen = HashSet<String>().apply { items.forEach { it.itemKey?.let(::add) } }
+            val fresh = more.filter { it.itemKey == null || seen.add(it.itemKey) }
+            if (fresh.isEmpty()) reachedEnd = true else extra.addAll(fresh)
             loadingMore = false
         }
     }
@@ -230,7 +234,7 @@ private fun GridView(
     if (style == LibraryStyle.List) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxSize()) {
             header?.let { item { it(); Spacer(Modifier.height(12.dp)) } }
-            listItemsIndexed(items, key = { _, it -> it.itemKey ?: it.title.orEmpty() }) { index, item ->
+            listItemsIndexed(items, key = { index, it -> it.itemKey ?: "row-$index-${it.title.orEmpty()}" }) { index, item ->
                 RoonListItem(
                     item.title ?: "—", item.subtitle, imageKey = item.imageKey, fetchArt = viewModel::loadArt,
                     modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
@@ -249,7 +253,7 @@ private fun GridView(
         modifier = Modifier.fillMaxSize(),
     ) {
         header?.let { item(span = { GridItemSpan(maxLineSpan) }) { it() } }
-        gridItemsIndexed(items, key = { _, it -> it.itemKey ?: it.title.orEmpty() }) { index, item ->
+        gridItemsIndexed(items, key = { index, it -> it.itemKey ?: "cell-$index-${it.title.orEmpty()}" }) { index, item ->
             val focusMod = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
             if (style == LibraryStyle.Tile && item.imageKey.isNullOrEmpty()) {
                 ColorTile(item.title ?: "—", modifier = focusMod) { onOpen(item) }
@@ -272,8 +276,10 @@ private fun LoadMoreSentinel(onLoadMore: () -> Unit) {
 
 @Composable
 private fun DetailView(page: BrowsePage?, items: List<BrowseItem>, viewModel: RoonViewModel, firstFocus: FocusRequester, canLoadMore: Boolean, onLoadMore: () -> Unit, onOpen: (BrowseItem) -> Unit) {
-    val actions = items.filter { it.hint == "action" || it.hint == "action_list" }
-    val rows = items.filter { it.hint != "action" && it.hint != "action_list" }
+    // Header "chips" are verb actions (Play Album, Shuffle, Start Radio). Everything else — tracks and
+    // sub-lists, even though tracks are action_list items — renders as rows.
+    val actions = items.filter { (it.hint == "action" || it.hint == "action_list") && BrowseHeuristics.isActionVerb(it.title) }
+    val rows = items.filterNot { (it.hint == "action" || it.hint == "action_list") && BrowseHeuristics.isActionVerb(it.title) }
     val headerImage = page?.list?.imageKey ?: items.firstOrNull { !it.imageKey.isNullOrEmpty() }?.imageKey
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
@@ -309,7 +315,7 @@ private fun DetailView(page: BrowsePage?, items: List<BrowseItem>, viewModel: Ro
                 }
             }
         }
-        listItemsIndexed(rows, key = { _, it -> it.itemKey ?: it.title.orEmpty() }) { index, row ->
+        listItemsIndexed(rows, key = { index, it -> it.itemKey ?: "det-$index-${it.title.orEmpty()}" }) { index, row ->
             RoonListItem(
                 row.title ?: "—", row.subtitle, imageKey = row.imageKey, fetchArt = viewModel::loadArt,
                 modifier = if (actions.isEmpty() && index == 0) Modifier.focusRequester(firstFocus) else Modifier,

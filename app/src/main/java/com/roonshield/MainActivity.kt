@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // A remote should stay awake while it's on screen (no screensaver interrupting playback control).
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        intent?.getStringExtra("start_tab")?.let { viewModel.initialTab = it }
         setContent {
             RoonShieldTheme {
                 RoonApp(viewModel)

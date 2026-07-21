@@ -103,7 +103,7 @@ private fun BootSplash() {
 
 @Composable
 private fun MainScaffold(viewModel: RoonViewModel) {
-    var selected by remember { mutableStateOf("home") }
+    var selected by remember { mutableStateOf(viewModel.initialTab ?: "home") }
     var showZones by remember { mutableStateOf(false) }
     val activeZone by viewModel.activeZone.collectAsState()
     val zones by viewModel.zones.collectAsState()
