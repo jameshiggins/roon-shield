@@ -26,6 +26,7 @@ class RoonBrowse(private val moo: Moo) {
         refreshList: Boolean = false,
         setDisplayOffset: Int? = null,
         zoneOrOutputId: String? = null,
+        multiSessionKey: String? = null,
     ): BrowseResult? {
         val body = buildJsonObject {
             put("hierarchy", hierarchy)
@@ -36,6 +37,7 @@ class RoonBrowse(private val moo: Moo) {
             if (refreshList) put("refresh_list", true)
             setDisplayOffset?.let { put("set_display_offset", it) }
             zoneOrOutputId?.let { put("zone_or_output_id", it) }
+            multiSessionKey?.let { put("multi_session_key", it) }
         }.toString().toByteArray()
         val msg = moo.requestComplete("${RoonExtension.SVC_BROWSE}/browse", body)
         return msg.bodyText?.let { runCatching { RoonJson.decodeFromString<BrowseResult>(it) }.getOrNull() }
@@ -48,6 +50,7 @@ class RoonBrowse(private val moo: Moo) {
         level: Int? = null,
         setDisplayOffset: Int? = null,
         zoneOrOutputId: String? = null,
+        multiSessionKey: String? = null,
     ): LoadResult? {
         val body = buildJsonObject {
             put("hierarchy", hierarchy)
@@ -56,6 +59,7 @@ class RoonBrowse(private val moo: Moo) {
             level?.let { put("level", it) }
             setDisplayOffset?.let { put("set_display_offset", it) }
             zoneOrOutputId?.let { put("zone_or_output_id", it) }
+            multiSessionKey?.let { put("multi_session_key", it) }
         }.toString().toByteArray()
         val msg = moo.requestComplete("${RoonExtension.SVC_BROWSE}/load", body)
         return msg.bodyText?.let { runCatching { RoonJson.decodeFromString<LoadResult>(it) }.getOrNull() }

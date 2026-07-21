@@ -176,6 +176,7 @@ class RoonRepository(context: Context) {
         input: String? = null,
         popAll: Boolean = false,
         popLevels: Int? = null,
+        multiSessionKey: String? = null,
     ): BrowseResult? = browse?.browse(
         hierarchy = hierarchy,
         itemKey = itemKey,
@@ -183,11 +184,30 @@ class RoonRepository(context: Context) {
         popAll = popAll,
         popLevels = popLevels,
         zoneOrOutputId = _activeZoneId.value,
+        multiSessionKey = multiSessionKey,
     )
 
-    suspend fun load(hierarchy: String = "browse", offset: Int = 0, count: Int = 100): LoadResult? =
-        browse?.load(hierarchy = hierarchy, offset = offset, count = count, zoneOrOutputId = _activeZoneId.value)
+    suspend fun load(
+        hierarchy: String = "browse",
+        offset: Int = 0,
+        count: Int = 100,
+        multiSessionKey: String? = null,
+    ): LoadResult? = browse?.load(
+        hierarchy = hierarchy,
+        offset = offset,
+        count = count,
+        zoneOrOutputId = _activeZoneId.value,
+        multiSessionKey = multiSessionKey,
+    )
 
     suspend fun loadImage(imageKey: String, width: Int, height: Int): ByteArray? =
         image?.getImage(imageKey, width, height)
+
+    /** True once a Core is paired and browse/transport services are live. */
+    val isReady: Boolean get() = browse != null
+
+    fun setVolumeAbsolute(value: Int) = withTransportZone { t, z ->
+        val out = z.primaryOutputId ?: return@withTransportZone
+        t.changeVolume(out, value, "absolute")
+    }
 }

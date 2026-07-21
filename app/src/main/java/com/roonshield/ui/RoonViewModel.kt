@@ -3,6 +3,7 @@ package com.roonshield.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.roonshield.roon.BrowseSession
 import com.roonshield.roon.ConnectionState
 import com.roonshield.roon.RoonLog
 import com.roonshield.roon.RoonRepository
@@ -57,8 +58,16 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     fun connectDiscovered(core: com.roonshield.roon.DiscoveredCore) = repo.connect(core)
     fun disconnect() = repo.disconnect()
 
-    // ---- Zones ----
+    // ---- Zones / volume ----
     fun setZone(zoneId: String) = repo.setActiveZone(zoneId)
+    fun nudgeVolume(delta: Int) = repo.nudgeVolume(delta)
+    fun setVolume(value: Int) = repo.setVolumeAbsolute(value)
+    fun toggleMute() = repo.toggleMute()
+
+    // ---- Browse ----
+    /** A fresh isolated browse cursor for a screen (Home/Artist/Album/Search…). */
+    fun browseSession(key: String, hierarchy: String = "browse"): BrowseSession =
+        BrowseSession(repo, key, hierarchy)
 
     // ---- Transport ----
     fun playPause() = repo.playPause()

@@ -11,41 +11,64 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.material3.Text
 import com.roonshield.roon.ConnectionState
-import com.roonshield.ui.browse.BrowseScreen
 import com.roonshield.ui.browse.SearchScreen
+import com.roonshield.ui.components.BrowsePane
+import com.roonshield.ui.components.BrowseStyle
 import com.roonshield.ui.components.NavRailItem
+import com.roonshield.ui.components.NowPlayingBar
 import com.roonshield.ui.components.RoonLogo
 import com.roonshield.ui.connect.ConnectScreen
+import com.roonshield.ui.home.HomeScreen
 import com.roonshield.ui.nowplaying.NowPlayingScreen
 import com.roonshield.ui.queue.QueueScreen
 import com.roonshield.ui.theme.RoonAccent
 import com.roonshield.ui.theme.RoonBackground
 import com.roonshield.ui.theme.RoonSurface
 import com.roonshield.ui.theme.RoonTextPrimary
-import com.roonshield.ui.theme.RoonTextSecondary
+import com.roonshield.ui.zones.ZoneOverlay
+
+private data class NavItem(val id: String, val label: String, val icon: ImageVector)
+
+private val NAV_ITEMS = listOf(
+    NavItem("home", "Home", Icons.Filled.Home),
+    NavItem("albums", "Albums", Icons.Filled.Album),
+    NavItem("artists", "Artists", Icons.Filled.Groups),
+    NavItem("genres", "Genres", Icons.Filled.Category),
+    NavItem("composers", "Composers", Icons.Filled.MusicNote),
+    NavItem("playlists", "Playlists", Icons.AutoMirrored.Filled.QueueMusic),
+    NavItem("radio", "Live Radio", Icons.Filled.Radio),
+    NavItem("browse", "Browse", Icons.Filled.LibraryMusic),
+    NavItem("search", "Search", Icons.Filled.Search),
+    NavItem("queue", "Queue", Icons.AutoMirrored.Filled.QueueMusic),
+    NavItem("settings", "Settings", Icons.Filled.Settings),
+    NavItem("nowplaying", "Now Playing", Icons.Filled.PlayCircle),
+)
 
 @Composable
 fun RoonApp(viewModel: RoonViewModel) {
@@ -55,7 +78,6 @@ fun RoonApp(viewModel: RoonViewModel) {
     Box(modifier = Modifier.fillMaxSize().background(RoonBackground)) {
         when {
             connection is ConnectionState.Connected -> MainScaffold(viewModel)
-            // Show a splash (not the discovery screen) while the silent reconnect runs.
             booting && connection is ConnectionState.Idle -> BootSplash()
             else -> ConnectScreen(viewModel)
         }
@@ -73,62 +95,83 @@ private fun BootSplash() {
     }
 }
 
-private data class NavEntry(val destination: Destination, val icon: ImageVector)
-
 @Composable
 private fun MainScaffold(viewModel: RoonViewModel) {
-    var selected by remember { mutableStateOf(Destination.NowPlaying) }
+    var selected by remember { mutableStateOf("home") }
+    var showZones by remember { mutableStateOf(false) }
     val activeZone by viewModel.activeZone.collectAsState()
-    val firstNavFocus = remember { FocusRequester() }
+    val zones by viewModel.zones.collectAsState()
+    val activeZoneId by viewModel.activeZoneId.collectAsState()
 
-    // Give the controller a focus anchor on the nav rail when the app opens, so the first
-    // D-pad press does something instead of being swallowed by an unfocused tree.
-    LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
-
-    val entries = listOf(
-        NavEntry(Destination.NowPlaying, Icons.Filled.PlayCircle),
-        NavEntry(Destination.Browse, Icons.Filled.LibraryMusic),
-        NavEntry(Destination.Search, Icons.Filled.Search),
-        NavEntry(Destination.Queue, Icons.AutoMirrored.Filled.QueueMusic),
-    )
-
-    Row(modifier = Modifier.fillMaxSize()) {
-        // Navigation rail
-        Column(
-            modifier = Modifier
-                .width(230.dp)
-                .fillMaxHeight()
-                .background(RoonSurface)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            RoonLogo(height = 22.dp, tint = RoonTextPrimary)
-            Spacer(Modifier.height(16.dp))
-            entries.forEachIndexed { index, entry ->
-                NavRailItem(
-                    label = entry.destination.label,
-                    icon = entry.icon,
-                    selected = selected == entry.destination,
-                    modifier = if (index == 0) Modifier.focusRequester(firstNavFocus) else Modifier,
-                    onClick = { selected = entry.destination },
-                )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            // Scrollable native-style nav rail
+            Column(
+                modifier = Modifier
+                    .width(228.dp)
+                    .fillMaxHeight()
+                    .background(RoonSurface)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                RoonLogo(height = 22.dp, tint = RoonTextPrimary)
+                Spacer(Modifier.height(14.dp))
+                NAV_ITEMS.forEach { item ->
+                    NavRailItem(
+                        label = item.label,
+                        icon = item.icon,
+                        selected = selected == item.id,
+                        onClick = { selected = item.id },
+                    )
+                }
             }
-            Spacer(Modifier.height(24.dp))
-            Text(
-                text = activeZone?.displayName ?: "No zone",
-                color = RoonTextSecondary,
-                fontSize = 12.sp,
+
+            // Content + footer
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                    Content(selected, viewModel, onSelect = { selected = it })
+                }
+                if (selected != "nowplaying") {
+                    NowPlayingBar(
+                        zone = activeZone,
+                        fetchArt = viewModel::loadArt,
+                        onOpenNowPlaying = { selected = "nowplaying" },
+                        onPlayPause = viewModel::playPause,
+                        onNext = viewModel::next,
+                        onOpenZones = { showZones = true },
+                    )
+                }
+            }
+        }
+
+        if (showZones) {
+            ZoneOverlay(
+                zones = zones,
+                activeZoneId = activeZoneId,
+                onSelect = { viewModel.setZone(it); showZones = false },
+                onNudgeVolume = viewModel::nudgeVolume,
+                onToggleMute = viewModel::toggleMute,
+                onClose = { showZones = false },
             )
         }
+    }
+}
 
-        // Content
-        Box(modifier = Modifier.fillMaxSize()) {
-            when (selected) {
-                Destination.NowPlaying -> NowPlayingScreen(viewModel)
-                Destination.Browse -> BrowseScreen(viewModel)
-                Destination.Search -> SearchScreen(viewModel)
-                Destination.Queue -> QueueScreen(viewModel)
-            }
-        }
+@Composable
+private fun Content(selected: String, viewModel: RoonViewModel, onSelect: (String) -> Unit) {
+    when (selected) {
+        "home" -> HomeScreen(viewModel, onNavigate = onSelect)
+        "albums" -> BrowsePane(viewModel, sessionKey = "albums", rootHierarchy = "albums", style = BrowseStyle.Grid, rootTitle = "Albums")
+        "artists" -> BrowsePane(viewModel, sessionKey = "artists", rootHierarchy = "artists", style = BrowseStyle.Circle, rootTitle = "Artists")
+        "genres" -> BrowsePane(viewModel, sessionKey = "genres", rootHierarchy = "genres", style = BrowseStyle.Grid, rootTitle = "Genres")
+        "composers" -> BrowsePane(viewModel, sessionKey = "composers", rootHierarchy = "composers", style = BrowseStyle.Circle, rootTitle = "Composers")
+        "playlists" -> BrowsePane(viewModel, sessionKey = "playlists", rootHierarchy = "playlists", style = BrowseStyle.List, rootTitle = "Playlists")
+        "radio" -> BrowsePane(viewModel, sessionKey = "radio", rootHierarchy = "internet_radio", style = BrowseStyle.List, rootTitle = "Live Radio")
+        "browse" -> BrowsePane(viewModel, sessionKey = "browse", rootHierarchy = "browse", style = BrowseStyle.Grid, rootTitle = "Browse")
+        "search" -> SearchScreen(viewModel)
+        "queue" -> QueueScreen(viewModel)
+        "settings" -> BrowsePane(viewModel, sessionKey = "settings", rootHierarchy = "settings", style = BrowseStyle.List, rootTitle = "Settings")
+        "nowplaying" -> NowPlayingScreen(viewModel)
     }
 }
