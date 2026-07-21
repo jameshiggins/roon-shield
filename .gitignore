@@ -21,6 +21,9 @@ captures/
 *.keystore
 keystore.properties
 
+# Build logs
+build-*.log
+
 # OS
 .DS_Store
 Thumbs.db
