@@ -1,6 +1,7 @@
 package com.roonshield.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WatchLater
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,21 +40,16 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.roonshield.roon.ConnectionState
-import com.roonshield.ui.albums.AlbumsScreen
-import com.roonshield.ui.artists.ArtistsScreen
-import com.roonshield.ui.components.BrowsePane
-import com.roonshield.ui.components.BrowseStyle
+import com.roonshield.ui.browse.LibraryBrowser
+import com.roonshield.ui.browse.LibraryStyle
 import com.roonshield.ui.components.NavRailItem
 import com.roonshield.ui.components.NowPlayingBar
 import com.roonshield.ui.components.RoonLogo
-import com.roonshield.ui.composers.ComposersScreen
 import com.roonshield.ui.connect.ConnectScreen
-import com.roonshield.ui.genres.GenresScreen
 import com.roonshield.ui.home.HomeScreen
+import com.roonshield.ui.listenlater.ListenLaterScreen
 import com.roonshield.ui.nowplaying.NowPlayingScreenV2
-import com.roonshield.ui.playlists.PlaylistsScreen
 import com.roonshield.ui.queue.QueueScreenV2
-import com.roonshield.ui.radio.RadioScreen
 import com.roonshield.ui.search.SearchScreenV2
 import com.roonshield.ui.settings.SettingsScreen
 import com.roonshield.ui.theme.RoonAccent
@@ -71,6 +68,7 @@ private val NAV_ITEMS = listOf(
     NavItem("composers", "Composers", Icons.Filled.MusicNote),
     NavItem("playlists", "Playlists", Icons.AutoMirrored.Filled.QueueMusic),
     NavItem("radio", "Live Radio", Icons.Filled.Radio),
+    NavItem("listenlater", "Listen Later", Icons.Filled.WatchLater),
     NavItem("browse", "Browse", Icons.Filled.LibraryMusic),
     NavItem("search", "Search", Icons.Filled.Search),
     NavItem("queue", "Queue", Icons.AutoMirrored.Filled.QueueMusic),
@@ -121,6 +119,7 @@ private fun MainScaffold(viewModel: RoonViewModel) {
                     .width(228.dp)
                     .fillMaxHeight()
                     .background(RoonSurface)
+                    .focusGroup()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -139,7 +138,7 @@ private fun MainScaffold(viewModel: RoonViewModel) {
             }
 
             // Content + footer
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize().focusGroup()) {
                 Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                     Content(selected, viewModel, onSelect = { selected = it })
                 }
@@ -173,13 +172,14 @@ private fun MainScaffold(viewModel: RoonViewModel) {
 private fun Content(selected: String, viewModel: RoonViewModel, onSelect: (String) -> Unit) {
     when (selected) {
         "home" -> HomeScreen(viewModel, onNavigate = onSelect)
-        "albums" -> AlbumsScreen(viewModel)
-        "artists" -> ArtistsScreen(viewModel)
-        "genres" -> GenresScreen(viewModel)
-        "composers" -> ComposersScreen(viewModel)
-        "playlists" -> PlaylistsScreen(viewModel)
-        "radio" -> RadioScreen(viewModel)
-        "browse" -> BrowsePane(viewModel, sessionKey = "browse", rootHierarchy = "browse", style = BrowseStyle.Grid, rootTitle = "Browse")
+        "albums" -> LibraryBrowser(viewModel, "albums", "albums", "Albums", style = LibraryStyle.Grid)
+        "artists" -> LibraryBrowser(viewModel, "artists", "artists", "Artists", style = LibraryStyle.Circle)
+        "genres" -> LibraryBrowser(viewModel, "genres", "genres", "Genres", style = LibraryStyle.Tile)
+        "composers" -> LibraryBrowser(viewModel, "composers", "composers", "Composers", style = LibraryStyle.Circle)
+        "playlists" -> LibraryBrowser(viewModel, "playlists", "playlists", "Playlists", style = LibraryStyle.Grid)
+        "radio" -> LibraryBrowser(viewModel, "radio", "internet_radio", "Live Radio", style = LibraryStyle.Grid)
+        "listenlater" -> ListenLaterScreen(viewModel, onNavigate = onSelect)
+        "browse" -> LibraryBrowser(viewModel, "browse", "browse", "Browse", style = LibraryStyle.Grid)
         "search" -> SearchScreenV2(viewModel)
         "queue" -> QueueScreenV2(viewModel)
         "settings" -> SettingsScreen(viewModel)

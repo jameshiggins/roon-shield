@@ -5,8 +5,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.ListSerializer
 
 private val Context.dataStore by preferencesDataStore(name = "roon")
 
@@ -43,9 +45,34 @@ class RoonPrefs(private val context: Context) {
         context.dataStore.edit { it[LAST_ZONE] = zoneId }
     }
 
+    // ---- Listen Later ----
+
+    private val listSerializer = ListSerializer(ListenLaterEntry.serializer())
+
+    private fun decodeListenLater(raw: String?): List<ListenLaterEntry> =
+        raw?.let { runCatching { RoonJson.decodeFromString(listSerializer, it) }.getOrNull() } ?: emptyList()
+
+    val listenLater: Flow<List<ListenLaterEntry>> =
+        context.dataStore.data.map { decodeListenLater(it[LISTEN_LATER]) }
+
+    suspend fun addListenLater(entry: ListenLaterEntry) {
+        context.dataStore.edit { prefs ->
+            val current = decodeListenLater(prefs[LISTEN_LATER]).filterNot { it.title.equals(entry.title, ignoreCase = true) }
+            prefs[LISTEN_LATER] = RoonJson.encodeToString(listSerializer, listOf(entry) + current)
+        }
+    }
+
+    suspend fun removeListenLater(title: String) {
+        context.dataStore.edit { prefs ->
+            val current = decodeListenLater(prefs[LISTEN_LATER]).filterNot { it.title.equals(title, ignoreCase = true) }
+            prefs[LISTEN_LATER] = RoonJson.encodeToString(listSerializer, current)
+        }
+    }
+
     private companion object {
         val LAST_HOST = stringPreferencesKey("last_host")
         val LAST_PORT = intPreferencesKey("last_port")
         val LAST_ZONE = stringPreferencesKey("last_zone")
+        val LISTEN_LATER = stringPreferencesKey("listen_later")
     }
 }

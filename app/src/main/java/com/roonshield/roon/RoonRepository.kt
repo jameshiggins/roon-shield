@@ -203,6 +203,19 @@ class RoonRepository(context: Context) {
     suspend fun loadImage(imageKey: String, width: Int, height: Int): ByteArray? =
         image?.getImage(imageKey, width, height)
 
+    // ---- Listen Later (app-local) ----
+
+    val listenLater: StateFlow<List<ListenLaterEntry>> =
+        prefs.listenLater.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    fun addListenLater(entry: ListenLaterEntry) {
+        scope.launch { prefs.addListenLater(entry) }
+    }
+
+    fun removeListenLater(title: String) {
+        scope.launch { prefs.removeListenLater(title) }
+    }
+
     /** True once a Core is paired and browse/transport services are live. */
     val isReady: Boolean get() = browse != null
 

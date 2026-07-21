@@ -81,6 +81,31 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     fun cycleLoop() = repo.cycleLoop()
     fun playFromQueue(queueItemId: Long) = repo.playFromQueue(queueItemId)
 
+    // ---- Cross-tab search request (e.g. from Listen Later -> Search) ----
+    private val _pendingSearch = MutableStateFlow<String?>(null)
+    val pendingSearch: StateFlow<String?> = _pendingSearch
+    fun requestSearch(query: String) { _pendingSearch.value = query }
+    fun consumePendingSearch(): String? {
+        val v = _pendingSearch.value
+        _pendingSearch.value = null
+        return v
+    }
+
+    // ---- Listen Later ----
+    val listenLater = repo.listenLater
+    fun addListenLater(item: com.roonshield.roon.model.BrowseItem) {
+        val title = item.title ?: return
+        repo.addListenLater(
+            com.roonshield.roon.ListenLaterEntry(
+                title = title,
+                subtitle = item.subtitle,
+                imageKey = item.imageKey,
+                query = listOfNotNull(item.title, item.subtitle?.substringBefore(" · ")).joinToString(" ").ifBlank { title },
+            ),
+        )
+    }
+    fun removeListenLater(title: String) = repo.removeListenLater(title)
+
     // ---- Images ----
     suspend fun loadArt(imageKey: String, width: Int, height: Int) = repo.loadImage(imageKey, width, height)
 }

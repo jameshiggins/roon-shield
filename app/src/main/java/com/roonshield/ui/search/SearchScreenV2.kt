@@ -123,6 +123,20 @@ fun SearchScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) {
         }
     }
 
+    // A query requested from another screen (e.g. Listen Later) runs automatically on entry.
+    LaunchedEffect(Unit) {
+        viewModel.consumePendingSearch()?.let { q ->
+            query = q
+            loading = true
+            submitted = true
+            runCatching { session.home() }
+            val res = runCatching { session.input(q) }.getOrNull()
+            stack.clear()
+            if (res != null) stack.add(res)
+            loading = false
+        }
+    }
+
     // Back pops drilled-in result levels; at the top results level it clears back to the empty state.
     BackHandler(enabled = stack.isNotEmpty()) {
         scope.launch {
