@@ -113,7 +113,7 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(top = 40.dp, end = 44.dp)
+                            .padding(top = 24.dp, end = 44.dp) // top-aligned with the album art
                             .fillMaxHeight(0.52f)
                             .aspectRatio(1.3f)
                             .clip(RoundedCornerShape(14.dp))
@@ -130,22 +130,17 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                     horizontalAlignment = Alignment.End,
                 ) {
                     Text(
-                        text = (z.displayName ?: "").uppercase(),
-                        color = RoonAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
                         text = lines?.line1 ?: "Nothing playing",
-                        color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, lineHeight = 28.sp,
+                        color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, lineHeight = 37.sp,
                     )
                     lines?.line2?.takeIf { it.isNotEmpty() }?.let {
-                        Spacer(Modifier.height(4.dp))
-                        Text(it, color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, color = Color.White.copy(alpha = 0.85f), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
                     }
                     lines?.line3?.takeIf { it.isNotEmpty() }?.let {
                         Spacer(Modifier.height(2.dp))
-                        Text(it, color = RoonTextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
+                        Text(it, color = RoonTextSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
                     }
 
                     Spacer(Modifier.height(16.dp))
