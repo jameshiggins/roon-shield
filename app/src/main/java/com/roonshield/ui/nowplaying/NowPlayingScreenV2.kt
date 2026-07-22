@@ -107,29 +107,31 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                 AlbumArt(np?.imageKey, sizePx = 1080, fetch = viewModel::loadArt, modifier = Modifier.fillMaxSize())
             }
 
-            // Remaining space: artist photos top-right, details bottom-right.
+            // Remaining space: photo + title + artist grouped top-right (equal photo/title/artist
+            // spacing), scrubber + controls anchored bottom-right.
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 val artistKeys = np?.artistImageKeys ?: emptyList()
-                if (artistKeys.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 24.dp, end = 44.dp) // top-aligned with the album art
-                            .fillMaxHeight(0.52f)
-                            .aspectRatio(1.3f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
-                    ) {
-                        ArtistPhotos(artistKeys, viewModel::loadArt)
-                    }
-                }
+                val gap = 10.dp
+
                 Column(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 44.dp, bottom = 40.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(top = 24.dp, end = 44.dp) // top-aligned with the album art
                         .widthIn(max = 460.dp),
                     horizontalAlignment = Alignment.End,
                 ) {
+                    if (artistKeys.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1.55f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
+                        ) {
+                            ArtistPhotos(artistKeys, viewModel::loadArt)
+                        }
+                        Spacer(Modifier.height(gap)) // photo -> title
+                    }
                     AutoSizeText(
                         text = lines?.line1 ?: "Nothing playing",
                         color = Color.White,
@@ -139,7 +141,7 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                         modifier = Modifier.fillMaxWidth(),
                     )
                     lines?.line2?.takeIf { it.isNotEmpty() }?.let {
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(gap)) // title -> artist (same gap)
                         AutoSizeText(
                             text = it,
                             color = Color.White.copy(alpha = 0.85f),
@@ -150,11 +152,18 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                         )
                     }
                     lines?.line3?.takeIf { it.isNotEmpty() }?.let {
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(3.dp))
                         Text(it, color = RoonTextSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
                     }
+                }
 
-                    Spacer(Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 44.dp, bottom = 40.dp)
+                        .widthIn(max = 460.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
                     Scrubber(np?.seekPosition ?: 0, np?.length ?: 0, viewModel::seekBy, viewModel::playPause)
 
                     Spacer(Modifier.height(16.dp))
