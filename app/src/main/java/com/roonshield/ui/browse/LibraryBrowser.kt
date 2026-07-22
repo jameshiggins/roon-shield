@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed as listItemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.WatchLater
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -140,7 +142,12 @@ fun LibraryBrowser(
     val extra = remember(sessionKey) { mutableStateListOf<BrowseItem>() }
     var loadingMore by remember(sessionKey) { mutableStateOf(false) }
     var reachedEnd by remember(sessionKey) { mutableStateOf(false) }
-    LaunchedEffect(stack.size, sheetStack.size) { extra.clear(); loadingMore = false; reachedEnd = false }
+    var sortMode by remember(sessionKey) { mutableStateOf(SortMode.Default) }
+    var shuffleSeed by remember(sessionKey) { mutableStateOf(1) }
+    var showSort by remember(sessionKey) { mutableStateOf(false) }
+    LaunchedEffect(stack.size, sheetStack.size) {
+        extra.clear(); loadingMore = false; reachedEnd = false; sortMode = SortMode.Default; showSort = false
+    }
     val baseItems = page?.items ?: emptyList()
     val items = if (extra.isEmpty()) baseItems else baseItems + extra
     val canLoadMore = page != null && !reachedEnd && items.size < page.totalCount
@@ -157,25 +164,35 @@ fun LibraryBrowser(
             loadingMore = false
         }
     }
+    // A sort must cover the whole level, so eagerly page through everything while a sort is active.
+    LaunchedEffect(sortMode, canLoadMore, loadingMore) {
+        if (sortMode != SortMode.Default && canLoadMore && !loadingMore) loadMore()
+    }
+    val displayItems = applySort(items, sortMode, shuffleSeed)
+    val sorting = sortMode != SortMode.Default && canLoadMore // still loading the full set
+    val showSentinel = canLoadMore && sortMode == SortMode.Default
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = if (atRoot) rootTitle else (page?.title?.ifEmpty { rootTitle } ?: rootTitle),
                     color = RoonTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (!atRoot) { Spacer(Modifier.width(12.dp)); Text("· Back goes up", color = RoonTextSecondary, fontSize = 12.sp) }
-                if (loading) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(color = RoonAccent, modifier = Modifier.size(18.dp)) }
+                if (loading || sorting) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(color = RoonAccent, modifier = Modifier.size(18.dp)) }
+                Spacer(Modifier.weight(1f))
+                if (items.isNotEmpty()) SortChip(sortMode) { showSort = true }
             }
             Spacer(Modifier.height(12.dp))
 
             if (items.isEmpty() && !loading) {
                 Text(page?.message ?: "Nothing here.", color = RoonTextSecondary, fontSize = 14.sp)
             } else if (!atRoot && !BrowseHeuristics.looksLikeGrid(items)) {
-                DetailView(page, items, viewModel, firstFocus, canLoadMore, ::loadMore, ::open)
+                DetailView(page, displayItems, viewModel, firstFocus, showSentinel, ::loadMore, ::open)
             } else {
-                GridView(items, if (atRoot) style else LibraryStyle.Grid, viewModel, if (atRoot) header else null, firstFocus, canLoadMore, ::loadMore, ::open)
+                GridView(displayItems, if (atRoot) style else LibraryStyle.Grid, viewModel, if (atRoot) header else null, firstFocus, showSentinel, ::loadMore, ::open)
             }
         }
 
@@ -205,6 +222,26 @@ fun LibraryBrowser(
                     closeSheet()
                 },
                 onDismiss = ::closeSheet,
+            )
+        }
+        if (showSort) {
+            ActionSheet(
+                heading = "Sort",
+                subheading = null,
+                imageKey = null,
+                fetchArt = viewModel::loadArt,
+                actions = emptyList(),
+                extraActions = SortMode.entries.map { m ->
+                    SheetAction(m.name, m.label, if (m == sortMode) Icons.Filled.Check else Icons.AutoMirrored.Filled.Sort)
+                },
+                onPick = {},
+                onExtra = { sa ->
+                    val m = runCatching { SortMode.valueOf(sa.id) }.getOrNull() ?: SortMode.Default
+                    if (m == SortMode.Shuffle) shuffleSeed++
+                    sortMode = m
+                    showSort = false
+                },
+                onDismiss = { showSort = false },
             )
         }
         if (toast != null) {
@@ -341,6 +378,35 @@ private fun ActionChip(label: String, modifier: Modifier = Modifier, onClick: ()
         androidx.compose.material3.Icon(com.roonshield.ui.components.actionIcon(label), contentDescription = null, tint = if (focused) Color.White else RoonAccent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(label, color = if (focused) Color.White else RoonTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun SortChip(current: SortMode, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (focused) RoonAccent else RoonSurface)
+            .onFocusState { focused = it }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        androidx.compose.material3.Icon(
+            Icons.AutoMirrored.Filled.Sort,
+            contentDescription = "Sort",
+            tint = if (focused) Color.White else RoonTextSecondary,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = if (current == SortMode.Default) "Sort" else current.label,
+            color = if (focused) Color.White else RoonTextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
     }
 }
 
