@@ -51,6 +51,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roonshield.roon.model.Zone
@@ -129,14 +130,24 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                         .widthIn(max = 460.dp),
                     horizontalAlignment = Alignment.End,
                 ) {
-                    Text(
+                    AutoSizeText(
                         text = lines?.line1 ?: "Nothing playing",
-                        color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, lineHeight = 37.sp,
+                        color = Color.White,
+                        maxFontSize = 32.sp,
+                        minFontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     lines?.line2?.takeIf { it.isNotEmpty() }?.let {
                         Spacer(Modifier.height(6.dp))
-                        Text(it, color = Color.White.copy(alpha = 0.85f), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
+                        AutoSizeText(
+                            text = it,
+                            color = Color.White.copy(alpha = 0.85f),
+                            maxFontSize = 18.sp,
+                            minFontSize = 11.sp,
+                            fontWeight = FontWeight.Normal,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                     lines?.line3?.takeIf { it.isNotEmpty() }?.let {
                         Spacer(Modifier.height(2.dp))
@@ -170,6 +181,35 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
             }
         }
     }
+}
+
+/** Single-line text that shrinks its font size until it fits, instead of wrapping or ellipsizing. */
+@Composable
+private fun AutoSizeText(
+    text: String,
+    color: Color,
+    maxFontSize: TextUnit,
+    minFontSize: TextUnit,
+    fontWeight: FontWeight,
+    modifier: Modifier = Modifier,
+) {
+    var size by remember(text, maxFontSize) { mutableStateOf(maxFontSize) }
+    Text(
+        text = text,
+        color = color,
+        fontSize = size,
+        fontWeight = fontWeight,
+        textAlign = TextAlign.End,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        modifier = modifier,
+        onTextLayout = { result ->
+            if (result.hasVisualOverflow && size.value > minFontSize.value) {
+                size = (size.value - 1.5f).coerceAtLeast(minFontSize.value).sp
+            }
+        },
+    )
 }
 
 /** Cuts between the artist's photos in the top-right, cross-fading every few seconds. */
