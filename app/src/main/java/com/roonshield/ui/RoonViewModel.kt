@@ -7,6 +7,8 @@ import com.roonshield.roon.BrowseSession
 import com.roonshield.roon.ConnectionState
 import com.roonshield.roon.RoonLog
 import com.roonshield.roon.RoonRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,6 +83,26 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     fun cycleLoop() = repo.cycleLoop()
     fun playFromQueue(queueItemId: Long) = repo.playFromQueue(queueItemId)
 
+    // ---- Screensaver / idle ----
+    private val _screensaver = MutableStateFlow(false)
+    val screensaver: StateFlow<Boolean> = _screensaver.asStateFlow()
+    private var idleJob: Job? = null
+
+    /** Called on any user input. Wakes from the screensaver and restarts the idle countdown. */
+    fun onUserInteraction() {
+        if (_screensaver.value) _screensaver.value = false
+        idleJob?.cancel()
+        idleJob = viewModelScope.launch {
+            delay(SCREENSAVER_IDLE_MS)
+            _screensaver.value = true
+        }
+    }
+
+    /** Stop the idle countdown (e.g. when the app is backgrounded). */
+    fun cancelIdle() {
+        idleJob?.cancel()
+    }
+
     // ---- Cross-tab search request (e.g. from Listen Later -> Search) ----
     private val _pendingSearch = MutableStateFlow<String?>(null)
     val pendingSearch: StateFlow<String?> = _pendingSearch
@@ -108,4 +130,9 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Images ----
     suspend fun loadArt(imageKey: String, width: Int, height: Int) = repo.loadImage(imageKey, width, height)
+
+    companion object {
+        /** Idle time with no input before the now-playing screensaver appears. */
+        const val SCREENSAVER_IDLE_MS = 15_000L
+    }
 }

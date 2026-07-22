@@ -113,6 +113,20 @@ private fun MainScaffold(viewModel: RoonViewModel) {
     val firstNavFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
 
+    // Idle screensaver: after 15s of no input the app drops into full-screen Now Playing; any key wakes
+    // it (handled in the Activity) and returns to where you were.
+    val screensaver by viewModel.screensaver.collectAsState()
+    var enteredViaScreensaver by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(screensaver) {
+        if (screensaver) {
+            if (selected != "nowplaying") { lastTab = selected; selected = "nowplaying" }
+            enteredViaScreensaver = true
+        } else if (enteredViaScreensaver) {
+            if (selected == "nowplaying") selected = lastTab
+            enteredViaScreensaver = false
+        }
+    }
+
     fun goNowPlaying() {
         if (selected != "nowplaying") lastTab = selected
         selected = "nowplaying"

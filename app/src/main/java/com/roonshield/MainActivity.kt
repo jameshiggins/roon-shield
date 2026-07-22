@@ -13,6 +13,7 @@ import com.roonshield.ui.theme.RoonShieldTheme
 class MainActivity : ComponentActivity() {
 
     private val viewModel: RoonViewModel by viewModels()
+    private var consumeUpKeyCode: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +25,33 @@ class MainActivity : ComponentActivity() {
                 RoonApp(viewModel)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.onUserInteraction() // start the idle countdown while foreground
+    }
+
+    override fun onPause() {
+        super.onPause()
+        viewModel.cancelIdle()
+    }
+
+    /** Any input resets the idle timer. While the screensaver is up, the first key wakes it and is
+     *  consumed (so it doesn't also navigate), matching standard screensaver behaviour. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (viewModel.screensaver.value) {
+            if (event.action == KeyEvent.ACTION_DOWN) consumeUpKeyCode = event.keyCode
+            viewModel.onUserInteraction()
+            return true
+        }
+        if (event.action == KeyEvent.ACTION_UP && event.keyCode == consumeUpKeyCode) {
+            consumeUpKeyCode = null
+            viewModel.onUserInteraction()
+            return true
+        }
+        viewModel.onUserInteraction()
+        return super.dispatchKeyEvent(event)
     }
 
     /**
