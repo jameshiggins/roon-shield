@@ -1,5 +1,7 @@
 package com.roonshield.ui
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.roonshield.roon.ConnectionState
 import com.roonshield.ui.browse.LibraryBrowser
@@ -57,6 +60,24 @@ import com.roonshield.ui.theme.RoonBackground
 import com.roonshield.ui.theme.RoonSurface
 import com.roonshield.ui.theme.RoonTextPrimary
 import com.roonshield.ui.zones.ZoneOverlay
+
+/** The user's Roon Display app on the Shield; "Now Playing" launches it. */
+private const val ROON_DISPLAY_PACKAGE = "com.jameshiggins.roonviz"
+
+/** Launch the external Roon Display app. Returns false if it isn't installed (fall back in-app).
+ *  TV apps expose a LEANBACK_LAUNCHER activity, which getLaunchIntentForPackage misses — so we try
+ *  the leanback launch intent as well. */
+private fun launchRoonDisplay(context: Context): Boolean {
+    val pm = context.packageManager
+    val intent = pm.getLaunchIntentForPackage(ROON_DISPLAY_PACKAGE)
+        ?: pm.getLeanbackLaunchIntentForPackage(ROON_DISPLAY_PACKAGE)
+    android.util.Log.i("RoonShield/Display", "launch intent for $ROON_DISPLAY_PACKAGE = $intent")
+    if (intent == null) return false
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    return runCatching { context.startActivity(intent) }
+        .onFailure { android.util.Log.e("RoonShield/Display", "startActivity failed", it) }
+        .isSuccess
+}
 
 private data class NavItem(val id: String, val label: String, val icon: ImageVector)
 
@@ -103,13 +124,26 @@ private fun BootSplash() {
 
 @Composable
 private fun MainScaffold(viewModel: RoonViewModel) {
-    var selected by remember { mutableStateOf(viewModel.initialTab ?: "home") }
+    var selected by remember { mutableStateOf(viewModel.initialTab?.takeIf { it != "nowplaying" } ?: "home") }
     var showZones by remember { mutableStateOf(false) }
     val activeZone by viewModel.activeZone.collectAsState()
     val zones by viewModel.zones.collectAsState()
     val activeZoneId by viewModel.activeZoneId.collectAsState()
     val firstNavFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
+    val context = LocalContext.current
+
+    // "Now Playing" launches the external Roon Display app; falls back to the built-in screen.
+    fun openNowPlaying() {
+        if (!launchRoonDisplay(context)) selected = "nowplaying"
+    }
+
+    // Deep-link (--es start_tab nowplaying) triggers the display launch once.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        android.util.Log.i("RoonShield/Display", "MainScaffold init, initialTab=${viewModel.initialTab}")
+        if (viewModel.initialTab == "nowplaying") openNowPlaying()
+        viewModel.initialTab = null
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
@@ -132,7 +166,7 @@ private fun MainScaffold(viewModel: RoonViewModel) {
                         icon = item.icon,
                         selected = selected == item.id,
                         modifier = if (index == 0) Modifier.focusRequester(firstNavFocus) else Modifier,
-                        onClick = { selected = item.id },
+                        onClick = { if (item.id == "nowplaying") openNowPlaying() else selected = item.id },
                     )
                 }
             }
@@ -146,7 +180,7 @@ private fun MainScaffold(viewModel: RoonViewModel) {
                     NowPlayingBar(
                         zone = activeZone,
                         fetchArt = viewModel::loadArt,
-                        onOpenNowPlaying = { selected = "nowplaying" },
+                        onOpenNowPlaying = { openNowPlaying() },
                         onPlayPause = viewModel::playPause,
                         onNext = viewModel::next,
                         onOpenZones = { showZones = true },
