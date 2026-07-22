@@ -1,5 +1,6 @@
 package com.roonshield.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -104,12 +105,25 @@ private fun BootSplash() {
 @Composable
 private fun MainScaffold(viewModel: RoonViewModel) {
     var selected by remember { mutableStateOf(viewModel.initialTab ?: "home") }
+    var lastTab by remember { mutableStateOf("home") }
     var showZones by remember { mutableStateOf(false) }
     val activeZone by viewModel.activeZone.collectAsState()
     val zones by viewModel.zones.collectAsState()
     val activeZoneId by viewModel.activeZoneId.collectAsState()
     val firstNavFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
+
+    fun goNowPlaying() {
+        if (selected != "nowplaying") lastTab = selected
+        selected = "nowplaying"
+    }
+
+    // Now Playing is a full-screen display: no nav rail, no footer. Back returns to the last tab.
+    if (selected == "nowplaying") {
+        BackHandler { selected = lastTab }
+        NowPlayingScreenV2(viewModel, modifier = Modifier.fillMaxSize())
+        return
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
@@ -132,7 +146,7 @@ private fun MainScaffold(viewModel: RoonViewModel) {
                         icon = item.icon,
                         selected = selected == item.id,
                         modifier = if (index == 0) Modifier.focusRequester(firstNavFocus) else Modifier,
-                        onClick = { selected = item.id },
+                        onClick = { if (item.id == "nowplaying") goNowPlaying() else selected = item.id },
                     )
                 }
             }
@@ -142,16 +156,14 @@ private fun MainScaffold(viewModel: RoonViewModel) {
                 Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                     Content(selected, viewModel, onSelect = { selected = it })
                 }
-                if (selected != "nowplaying") {
-                    NowPlayingBar(
-                        zone = activeZone,
-                        fetchArt = viewModel::loadArt,
-                        onOpenNowPlaying = { selected = "nowplaying" },
-                        onPlayPause = viewModel::playPause,
-                        onNext = viewModel::next,
-                        onOpenZones = { showZones = true },
-                    )
-                }
+                NowPlayingBar(
+                    zone = activeZone,
+                    fetchArt = viewModel::loadArt,
+                    onOpenNowPlaying = { goNowPlaying() },
+                    onPlayPause = viewModel::playPause,
+                    onNext = viewModel::next,
+                    onOpenZones = { showZones = true },
+                )
             }
         }
 
