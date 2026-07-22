@@ -54,11 +54,12 @@ fun HomeScreen(
     LibraryBrowser(
         viewModel = viewModel,
         sessionKey = "home",
-        rootHierarchy = "browse",
+        rootHierarchy = "albums",
         rootTitle = "Home",
         style = LibraryStyle.Grid,
         modifier = modifier,
         header = { QuickTiles(onNavigate) },
+        randomSample = true,
     )
 }
 

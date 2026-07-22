@@ -82,6 +82,7 @@ fun LibraryBrowser(
     modifier: Modifier = Modifier,
     style: LibraryStyle = LibraryStyle.Grid,
     header: (@Composable () -> Unit)? = null,
+    randomSample: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val session = remember(sessionKey) { viewModel.browseSession(sessionKey, rootHierarchy) }
@@ -100,7 +101,8 @@ fun LibraryBrowser(
     LaunchedEffect(sessionKey) {
         loading = true
         stack.clear(); sheetStack.clear()
-        stack.add(session.home())
+        val home = session.home()
+        stack.add(if (randomSample) buildRandomSample(session, home) else home)
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2200); toast = null } }
@@ -130,7 +132,14 @@ fun LibraryBrowser(
             if (sheetStack.size > 1) { scope.launch { session.back() }; sheetStack.removeAt(sheetStack.lastIndex) } else closeSheet()
             return
         }
-        if (stack.size > 1) scope.launch { val p = session.back(); if (stack.size > 1) { stack.removeAt(stack.lastIndex); stack[stack.lastIndex] = p } }
+        if (stack.size > 1) scope.launch {
+            val p = session.back()
+            if (stack.size > 1) {
+                stack.removeAt(stack.lastIndex)
+                // Preserve a random-sampled root (don't overwrite it with the ordered parent).
+                if (stack.size > 1 || !randomSample) stack[stack.lastIndex] = p
+            }
+        }
     }
 
     BackHandler(enabled = sheetStack.isNotEmpty() || stack.size > 1) { back() }
@@ -255,6 +264,26 @@ fun LibraryBrowser(
             }
         }
     }
+}
+
+/** Build a random-sample page: pull a few small windows from random offsets across the level, dedupe
+ *  and shuffle, so Home shows varied real album covers instead of ordered/empty category tiles. */
+private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage): BrowsePage {
+    val total = home.list?.count ?: home.items.size
+    if (total <= 30) return home
+    val rnd = kotlin.random.Random(System.nanoTime())
+    val windowSize = 6
+    val collected = LinkedHashMap<String, BrowseItem>()
+    var tries = 0
+    while (collected.size < 30 && tries < 8) {
+        tries++
+        val off = rnd.nextInt(0, (total - windowSize).coerceAtLeast(1))
+        val window = runCatching { session.page(off, windowSize) }.getOrNull().orEmpty()
+        window.forEach { item -> item.itemKey?.let { k -> collected[k] = item } }
+    }
+    if (collected.isEmpty()) return home
+    val items = collected.values.toList().shuffled(rnd)
+    return BrowsePage(list = home.list?.copy(count = items.size), items = items, level = 0)
 }
 
 @Composable
