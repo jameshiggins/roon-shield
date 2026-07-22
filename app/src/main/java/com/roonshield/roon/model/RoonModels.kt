@@ -40,6 +40,8 @@ data class NowPlaying(
     val oneLine: Lines? = null,
     val twoLine: Lines? = null,
     val threeLine: Lines? = null,
+    /** Photos of the performing artist(s), if Roon has them. */
+    val artistImageKeys: List<String> = emptyList(),
 )
 
 @Serializable

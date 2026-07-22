@@ -1,5 +1,7 @@
 package com.roonshield.ui.nowplaying
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -59,6 +61,7 @@ import com.roonshield.ui.components.onFocusState
 import com.roonshield.ui.theme.RoonAccent
 import com.roonshield.ui.theme.RoonTextPrimary
 import com.roonshield.ui.theme.RoonTextSecondary
+import kotlinx.coroutines.delay
 
 /**
  * Full-screen "display" now playing: the album art fills the full height on the left, and the
@@ -103,8 +106,22 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                 AlbumArt(np?.imageKey, sizePx = 1080, fetch = viewModel::loadArt, modifier = Modifier.fillMaxSize())
             }
 
-            // Remaining space: details pinned to the lower-right, never over the art.
+            // Remaining space: artist photos top-right, details bottom-right.
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                val artistKeys = np?.artistImageKeys ?: emptyList()
+                if (artistKeys.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 40.dp, end = 44.dp)
+                            .fillMaxHeight(0.52f)
+                            .aspectRatio(1.3f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
+                    ) {
+                        ArtistPhotos(artistKeys, viewModel::loadArt)
+                    }
+                }
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -157,6 +174,24 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                 }
             }
         }
+    }
+}
+
+/** Cuts between the artist's photos in the top-right, cross-fading every few seconds. */
+@Composable
+private fun ArtistPhotos(imageKeys: List<String>, fetch: suspend (String, Int, Int) -> ByteArray?) {
+    var index by remember(imageKeys) { mutableStateOf(0) }
+    LaunchedEffect(imageKeys) {
+        if (imageKeys.size > 1) {
+            while (true) {
+                delay(9000)
+                index = (index + 1) % imageKeys.size
+            }
+        }
+    }
+    val key = imageKeys.getOrNull(index.coerceIn(0, imageKeys.lastIndex.coerceAtLeast(0))) ?: return
+    Crossfade(targetState = key, animationSpec = tween(900), label = "artist") { k ->
+        AlbumArt(imageKey = k, sizePx = 640, showPlaceholder = false, fetch = fetch, modifier = Modifier.fillMaxSize())
     }
 }
 

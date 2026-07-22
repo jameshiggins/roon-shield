@@ -118,7 +118,7 @@ class RoonRepository(context: Context) {
         val fallback = restored
             ?: list.firstOrNull { it.isPlaying }
             ?: list.firstOrNull()
-        RoonLog.d("Repo", "active zone -> ${fallback?.displayName} (${fallback?.zoneId})")
+        RoonLog.d("Repo", "active zone -> ${fallback?.displayName} (${fallback?.zoneId}) artistImages=${fallback?.nowPlaying?.artistImageKeys?.size ?: 0}")
         _activeZoneId.value = fallback?.zoneId
     }
 
