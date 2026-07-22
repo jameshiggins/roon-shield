@@ -1,9 +1,17 @@
 package com.roonshield.roon
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReconnectPolicyTest {
+
+    @Test
+    fun stableThreshold_isSeveralSecondsSoAQuickDropNeverResetsBackoff() {
+        // Must be long enough that a register->drop loop (drops within ~1-2s) never resets backoff.
+        assertTrue(ReconnectPolicy.STABLE_MS >= 5000L)
+    }
+
 
     @Test
     fun backoffGrowsExponentiallyThenCaps() {

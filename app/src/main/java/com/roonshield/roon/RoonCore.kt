@@ -31,6 +31,8 @@ private const val AREA = "Core"
 object ReconnectPolicy {
     const val BASE_MS = 1000L
     const val MAX_MS = 15000L
+    /** A connection must stay up this long after registering before its backoff counter resets. */
+    const val STABLE_MS = 12000L
     fun backoffMs(attempt: Int): Long =
         (BASE_MS * (1L shl attempt.coerceIn(0, 4))).coerceAtMost(MAX_MS)
 }
@@ -75,6 +77,8 @@ class RoonCore(
      *  stale socket's failure can never tear down a newer, healthy connection. */
     @Volatile private var generation = 0
     private var reconnectJob: Job? = null
+    private var stabilityJob: Job? = null
+    @Volatile private var pairedGeneration = -1
 
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
@@ -95,6 +99,7 @@ class RoonCore(
         RoonLog.i(AREA, "disconnect() requested")
         manualClose = true
         reconnectJob?.cancel()
+        stabilityJob?.cancel()
         generation++ // invalidate any in-flight socket callbacks
         webSocket?.let { runCatching { it.cancel() } }
         webSocket = null
@@ -165,6 +170,7 @@ class RoonCore(
 
     private fun handleDrop(message: String, gen: Int) {
         if (gen != generation) return // stale socket — ignore
+        stabilityJob?.cancel() // dropped before proving stable -> keep backoff growing
         moo?.clear()
         moo = null
         webSocket = null
@@ -222,7 +228,15 @@ class RoonCore(
         val token = bodyJson?.get("token")?.jsonPrimitive?.content
         val name = bodyJson?.get("display_name")?.jsonPrimitive?.content ?: "Roon Core"
         RoonLog.i(AREA, "Registered with core '$name' (coreId=$id, token=${if (token != null) "received" else "none"})")
-        reconnectAttempts = 0 // stable connection reached — reset backoff
+        // Reset backoff ONLY after the connection proves stable. If the Core registers us then drops
+        // shortly after (duplicate extension id, Core quirk), this delayed reset is cancelled in
+        // handleDrop, so the backoff keeps growing instead of a tight register->drop->register loop.
+        stabilityJob?.cancel()
+        stabilityJob = scope.launch {
+            delay(ReconnectPolicy.STABLE_MS)
+            reconnectAttempts = 0
+            RoonLog.d(AREA, "connection stable for ${ReconnectPolicy.STABLE_MS}ms; backoff reset")
+        }
         if (id != null) {
             coreId = id
             scope.launch {
@@ -233,7 +247,12 @@ class RoonCore(
         _state.value = ConnectionState.Connected(name)
         // Push an initial status so the app shows as connected in Roon Settings.
         pushStatus("Connected", isError = false)
-        onPaired?.invoke()
+        // "Registered" can re-fire on the same socket (pairing changes); only wire services once per
+        // connection so the repository's zone/queue subscriptions don't churn.
+        if (pairedGeneration != generation) {
+            pairedGeneration = generation
+            onPaired?.invoke()
+        }
     }
 
     // ---- Provided services (core -> extension requests) ----
