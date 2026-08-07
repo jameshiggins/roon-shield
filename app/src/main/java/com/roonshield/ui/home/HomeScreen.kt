@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
@@ -68,7 +67,6 @@ private data class Quick(val id: String, val label: String, val icon: ImageVecto
 private val QUICK = listOf(
     Quick("albums", "Albums", Icons.Filled.Album),
     Quick("artists", "Artists", Icons.Filled.Groups),
-    Quick("genres", "Genres", Icons.Filled.Category),
     Quick("playlists", "Playlists", Icons.AutoMirrored.Filled.QueueMusic),
     Quick("radio", "Live Radio", Icons.Filled.Radio),
     Quick("listenlater", "Listen Later", Icons.Filled.WatchLater),
@@ -82,7 +80,7 @@ private fun QuickTiles(onNavigate: (String) -> Unit) {
             QUICK.forEach { q -> QuickTile(q, modifier = Modifier.weight(1f)) { onNavigate(q.id) } }
         }
         Spacer(Modifier.height(18.dp))
-        Text("EXPLORE", color = RoonTextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("TODAY'S ALBUMS · FROM YOUR LIBRARY", color = RoonTextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
     }
 }

@@ -28,7 +28,18 @@ import kotlinx.coroutines.Dispatchers
  * operations. All state is published as [StateFlow]s the Compose layer collects.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class RoonRepository(context: Context) {
+class RoonRepository private constructor(context: Context) {
+
+    companion object {
+        // Process-wide singleton: the WebSocket + reconnect loop must never be duplicated. A second
+        // instance (e.g. after Activity recreation) would register the same extension_id and the
+        // Core would kick the connections alternately — an endless connect/drop loop.
+        @Volatile private var instance: RoonRepository? = null
+        fun get(context: Context): RoonRepository =
+            instance ?: synchronized(this) {
+                instance ?: RoonRepository(context.applicationContext).also { instance = it }
+            }
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val prefs = RoonPrefs(context.applicationContext)
@@ -42,6 +53,11 @@ class RoonRepository(context: Context) {
 
     val connectionState: StateFlow<ConnectionState> = core.state
     val discoveredCores = MutableStateFlow<List<DiscoveredCore>>(emptyList())
+
+    /** Increments each time pairing completes. Screens key their browse sessions on this so stale
+     *  item keys are discarded after a reconnect while the UI itself stays mounted. */
+    private val _pairingEpoch = MutableStateFlow(0)
+    val pairingEpoch: StateFlow<Int> = _pairingEpoch
 
     private val _activeZoneId = MutableStateFlow<String?>(null)
     val activeZoneId: StateFlow<String?> = _activeZoneId
@@ -70,6 +86,7 @@ class RoonRepository(context: Context) {
                 browse = RoonBrowse(m)
                 image = RoonImage(m)
                 transportFlow.value = RoonTransport(m)
+                _pairingEpoch.value = _pairingEpoch.value + 1
             }
         }
         core.onUnpaired = {
@@ -93,11 +110,17 @@ class RoonRepository(context: Context) {
 
     fun connect(core: DiscoveredCore) = connect(core.host, core.port)
 
-    /** Re-attempt using the last successful Core address, if any. */
+    /** Re-attempt using the last successful Core address, if any. No-op when a connection is
+     *  already live or in flight (the singleton may be reused by a fresh Activity/ViewModel). */
     fun connectLast(onNone: () -> Unit) {
         scope.launch {
-            val last = prefs.getLastCore()
-            if (last != null) core.connect(last.first, last.second) else onNone()
+            when (connectionState.value) {
+                is ConnectionState.Idle, is ConnectionState.Error -> {
+                    val last = prefs.getLastCore()
+                    if (last != null) core.connect(last.first, last.second) else onNone()
+                }
+                else -> RoonLog.d("Repo", "connectLast: connection already ${connectionState.value}; reusing")
+            }
         }
     }
 
@@ -214,6 +237,22 @@ class RoonRepository(context: Context) {
 
     fun removeListenLater(title: String) {
         scope.launch { prefs.removeListenLater(title) }
+    }
+
+    // ---- Local-library filter ----
+
+    /** Normalized "title|artist" keys of albums that came from a linked streaming service's library
+     *  (TIDAL / Qobuz). Cached per pairing. Empty when no streaming service is linked. */
+    @Volatile private var streamingAlbums: Pair<Int, Set<String>>? = null
+
+    suspend fun streamingAlbumKeys(): Set<String> {
+        val epoch = _pairingEpoch.value
+        streamingAlbums?.let { (e, keys) -> if (e == epoch) return keys }
+        val keys = runCatching { StreamingLibraryProbe(this).collect() }
+            .onFailure { RoonLog.w("Repo", "streaming-library probe failed: ${it.message}") }
+            .getOrDefault(emptySet())
+        streamingAlbums = epoch to keys
+        return keys
     }
 
     /** True once a Core is paired and browse/transport services are live. */

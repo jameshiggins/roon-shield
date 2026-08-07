@@ -1,5 +1,6 @@
 package com.roonshield.ui.nowplaying
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -39,8 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -85,7 +88,37 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(z.zoneId) { runCatching { playFocus.requestFocus() } }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    // Album/artist info panel: pressing ▶ past the rightmost control opens it (album first),
+    // ▶ again switches to the artist. The root sees the key only when no control consumed it
+    // (the scrubber uses ◀/▶ to seek), so we move focus ourselves and open at the edge.
+    var infoTab by remember { mutableStateOf<InfoTab?>(null) }
+    // Reading is idle time to the screensaver — keep resetting the countdown while the panel is
+    // open so a long bio doesn't end with the next key press being eaten as a "wake".
+    LaunchedEffect(infoTab) {
+        while (infoTab != null) {
+            viewModel.onUserInteraction()
+            delay(5000)
+        }
+    }
+    val focusManager = LocalFocusManager.current
+    fun closeInfo() {
+        infoTab = null
+        runCatching { playFocus.requestFocus() }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .onKeyEvent { ev ->
+                if (infoTab == null && ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionRight) {
+                    if (!focusManager.moveFocus(FocusDirection.Right)) infoTab = InfoTab.Album
+                    true
+                } else {
+                    false
+                }
+            },
+    ) {
         // Blurred full-bleed backdrop derived from the art, darkened.
         AlbumArt(np?.imageKey, sizePx = 80, showPlaceholder = false, fetch = viewModel::loadArt, modifier = Modifier.fillMaxSize())
         Box(
@@ -188,6 +221,18 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                     }
                 }
             }
+        }
+
+        if (infoTab != null) {
+            BackHandler { closeInfo() }
+            NowPlayingInfoPanel(
+                tab = infoTab!!,
+                album = lines?.line3,
+                artist = lines?.line2,
+                onSwitchTab = { infoTab = it },
+                onClose = ::closeInfo,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
         }
     }
 }

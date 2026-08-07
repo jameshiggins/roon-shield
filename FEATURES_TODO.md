@@ -11,6 +11,18 @@ functionality from Roon's public Extension API in our own Roon-styled UI (no cop
 - **Unified LibraryBrowser** — one browse surface for all hierarchies (grid/circle/tile/list + detail),
   per-level first-item auto-focus, focus-grouped nav rail.
 - **Stable connection** — generation-guarded reconnect (fixed the reconnect loop).
+- **Singleton connection + sticky UI** — `RoonRepository` is process-wide (an Activity relaunch
+  reuses the live socket instead of spawning a duplicate that fights the first over the extension
+  id — the old "searching for core forever" loop). Transient drops keep the main UI mounted with a
+  "Reconnecting" overlay; browse levels reload on the pairing epoch so stale item keys are flushed.
+- **Today's Albums (Home)** — the random album sample is seeded by the calendar day (same picks all
+  day, fresh ones each morning) and limited to the **local library**: a browse-tree probe collects
+  the streaming services' library albums (e.g. Qobuz → My Qobuz → Favorite Albums) and excludes
+  them. Genres removed from the nav rail and Home tiles (unused).
+- **Now Playing info panel** — D-pad ▶ past the last control opens the album's Wikipedia entry;
+  ▶ again switches to the artist. (Roon's public API exposes none of the native TiVo review/bio
+  text, so Wikipedia is the source; lookups sanitize "(2009 Remaster)"-style noise and reject
+  same-name non-music articles.)
 - Discovery/pairing, Now Playing, Queue, Search, Zones/volume footer, silent reconnect, keep-screen-on.
 
 ## Won't do (hard Roon public-API limitations, documented in README)

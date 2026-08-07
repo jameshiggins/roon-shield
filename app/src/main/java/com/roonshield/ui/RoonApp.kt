@@ -14,11 +14,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WatchLater
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.roonshield.roon.ConnectionState
 import com.roonshield.ui.browse.LibraryBrowser
 import com.roonshield.ui.browse.LibraryStyle
@@ -65,7 +67,6 @@ private val NAV_ITEMS = listOf(
     NavItem("home", "Home", Icons.Filled.Home),
     NavItem("albums", "Albums", Icons.Filled.Album),
     NavItem("artists", "Artists", Icons.Filled.Groups),
-    NavItem("genres", "Genres", Icons.Filled.Category),
     NavItem("composers", "Composers", Icons.Filled.MusicNote),
     NavItem("playlists", "Playlists", Icons.AutoMirrored.Filled.QueueMusic),
     NavItem("radio", "Live Radio", Icons.Filled.Radio),
@@ -81,12 +82,35 @@ private val NAV_ITEMS = listOf(
 fun RoonApp(viewModel: RoonViewModel) {
     val connection by viewModel.connectionState.collectAsState()
     val booting by viewModel.booting.collectAsState()
+    val everConnected by viewModel.everConnected.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize().background(RoonBackground)) {
         when {
             connection is ConnectionState.Connected -> MainScaffold(viewModel)
+            // Transient drop while auto-reconnect runs: keep the main UI mounted (so Home, browse
+            // stacks and the daily sample survive) and just show a small overlay.
+            everConnected -> {
+                MainScaffold(viewModel)
+                ReconnectingOverlay()
+            }
             booting && connection is ConnectionState.Idle -> BootSplash()
             else -> ConnectScreen(viewModel)
+        }
+    }
+}
+
+@Composable
+private fun ReconnectingOverlay() {
+    Box(modifier = Modifier.fillMaxSize().padding(top = 16.dp), contentAlignment = Alignment.TopCenter) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .background(RoonSurface, shape = RoundedCornerShape(20.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            CircularProgressIndicator(color = RoonAccent, modifier = Modifier.height(16.dp).width(16.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Reconnecting to Roon Core…", color = RoonTextPrimary, fontSize = 13.sp)
         }
     }
 }
@@ -200,7 +224,6 @@ private fun Content(selected: String, viewModel: RoonViewModel, onSelect: (Strin
         "home" -> HomeScreen(viewModel, onNavigate = onSelect)
         "albums" -> LibraryBrowser(viewModel, "albums", "albums", "Albums", style = LibraryStyle.Grid)
         "artists" -> LibraryBrowser(viewModel, "artists", "artists", "Artists", style = LibraryStyle.Circle)
-        "genres" -> LibraryBrowser(viewModel, "genres", "genres", "Genres", style = LibraryStyle.Tile)
         "composers" -> LibraryBrowser(viewModel, "composers", "composers", "Composers", style = LibraryStyle.Circle)
         "playlists" -> LibraryBrowser(viewModel, "playlists", "playlists", "Playlists", style = LibraryStyle.Grid)
         "radio" -> LibraryBrowser(viewModel, "radio", "internet_radio", "Live Radio", style = LibraryStyle.Grid)

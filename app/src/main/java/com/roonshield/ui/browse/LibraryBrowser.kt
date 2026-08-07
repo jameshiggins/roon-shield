@@ -30,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.roonshield.roon.BrowseHeuristics
 import com.roonshield.roon.BrowsePage
 import com.roonshield.roon.BrowseSession
+import com.roonshield.roon.albumKey
 import com.roonshield.roon.model.BrowseItem
 import com.roonshield.ui.RoonViewModel
 import com.roonshield.ui.components.ActionSheet
@@ -64,6 +66,7 @@ import com.roonshield.ui.theme.RoonTextPrimary
 import com.roonshield.ui.theme.RoonTextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 enum class LibraryStyle { Grid, Circle, Tile, List }
 
@@ -85,6 +88,9 @@ fun LibraryBrowser(
     randomSample: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
+    // Re-pairing invalidates every server-side item key; keying the root load on the pairing epoch
+    // reloads this level after a reconnect while the screen itself stays mounted.
+    val pairingEpoch by viewModel.pairingEpoch.collectAsState()
     val session = remember(sessionKey) { viewModel.browseSession(sessionKey, rootHierarchy) }
     val stack = remember(sessionKey) { mutableStateListOf<BrowsePage>() }
     val sheetStack = remember(sessionKey) { mutableStateListOf<BrowsePage>() }
@@ -98,11 +104,11 @@ fun LibraryBrowser(
         if (sheetStack.isEmpty() && !loading && stack.isNotEmpty()) runCatching { firstFocus.requestFocus() }
     }
 
-    LaunchedEffect(sessionKey) {
+    LaunchedEffect(sessionKey, pairingEpoch) {
         loading = true
         stack.clear(); sheetStack.clear()
         val home = session.home()
-        stack.add(if (randomSample) buildRandomSample(session, home) else home)
+        stack.add(if (randomSample) buildRandomSample(session, home, viewModel.streamingAlbumKeys()) else home)
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2200); toast = null } }
@@ -266,20 +272,28 @@ fun LibraryBrowser(
     }
 }
 
-/** Build a random-sample page: pull a few small windows from random offsets across the level, dedupe
- *  and shuffle, so Home shows varied real album covers instead of ordered/empty category tiles. */
-private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage): BrowsePage {
+/** Build the "today's albums" page: windows pulled from random offsets across the level, deduped
+ *  and shuffled, excluding streaming-service library albums so only the local library shows.
+ *  Seeded by the calendar day, so the selection is the same all day (and across reconnects) and
+ *  rolls over to a fresh one each morning. */
+private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage, excluded: Set<String>): BrowsePage {
+    fun keep(item: BrowseItem) = excluded.isEmpty() || albumKey(item) !in excluded
     val total = home.list?.count ?: home.items.size
-    if (total <= 30) return home
-    val rnd = kotlin.random.Random(System.nanoTime())
+    if (total <= 30) {
+        val items = home.items.filter(::keep)
+        return BrowsePage(list = home.list?.copy(count = items.size), items = items, level = 0)
+    }
+    val rnd = kotlin.random.Random(LocalDate.now().toEpochDay())
     val windowSize = 6
     val collected = LinkedHashMap<String, BrowseItem>()
     var tries = 0
-    while (collected.size < 30 && tries < 8) {
+    while (collected.size < 30 && tries < 20) {
         tries++
         val off = rnd.nextInt(0, (total - windowSize).coerceAtLeast(1))
         val window = runCatching { session.page(off, windowSize) }.getOrNull().orEmpty()
-        window.forEach { item -> item.itemKey?.let { k -> collected[k] = item } }
+        window.forEach { item ->
+            if (item.itemKey != null && keep(item)) collected[albumKey(item)] = item
+        }
     }
     if (collected.isEmpty()) return home
     val items = collected.values.toList().shuffled(rnd)
