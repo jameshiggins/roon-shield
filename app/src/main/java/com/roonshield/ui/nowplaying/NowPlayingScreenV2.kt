@@ -88,21 +88,23 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(z.zoneId) { runCatching { playFocus.requestFocus() } }
 
-    // Album/artist info panel: pressing ▶ past the rightmost control opens it (album first),
-    // ▶ again switches to the artist. The root sees the key only when no control consumed it
-    // (the scrubber uses ◀/▶ to seek), so we move focus ourselves and open at the edge.
-    var infoTab by remember { mutableStateOf<InfoTab?>(null) }
+    // Album/artist info viewer: pressing ▼ below the controls opens it on the album entry; once
+    // open, ◀/▶ moves between the album and each artist, ▲/▼ scrolls, Back closes. The root sees
+    // ▼ only when no control consumed it, so we move focus ourselves and open at the bottom edge.
+    val infoSubjects = remember(lines?.line2, lines?.line3) { buildInfoSubjects(lines?.line3, lines?.line2) }
+    var infoIndex by remember { mutableStateOf<Int?>(null) }
+    if (infoIndex != null && infoIndex!! >= infoSubjects.size) infoIndex = if (infoSubjects.isEmpty()) null else 0
     // Reading is idle time to the screensaver — keep resetting the countdown while the panel is
     // open so a long bio doesn't end with the next key press being eaten as a "wake".
-    LaunchedEffect(infoTab) {
-        while (infoTab != null) {
+    LaunchedEffect(infoIndex != null) {
+        while (infoIndex != null) {
             viewModel.onUserInteraction()
             delay(5000)
         }
     }
     val focusManager = LocalFocusManager.current
     fun closeInfo() {
-        infoTab = null
+        infoIndex = null
         runCatching { playFocus.requestFocus() }
     }
 
@@ -111,8 +113,8 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
             .fillMaxSize()
             .background(Color.Black)
             .onKeyEvent { ev ->
-                if (infoTab == null && ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionRight) {
-                    if (!focusManager.moveFocus(FocusDirection.Right)) infoTab = InfoTab.Album
+                if (infoIndex == null && ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionDown && infoSubjects.isNotEmpty()) {
+                    if (!focusManager.moveFocus(FocusDirection.Down)) infoIndex = 0
                     true
                 } else {
                     false
@@ -223,14 +225,12 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
             }
         }
 
-        if (infoTab != null) {
+        if (infoIndex != null) {
             BackHandler { closeInfo() }
             NowPlayingInfoPanel(
-                tab = infoTab!!,
-                album = lines?.line3,
-                artist = lines?.line2,
-                onSwitchTab = { infoTab = it },
-                onClose = ::closeInfo,
+                subjects = infoSubjects,
+                index = infoIndex!!,
+                onSelect = { infoIndex = it },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }

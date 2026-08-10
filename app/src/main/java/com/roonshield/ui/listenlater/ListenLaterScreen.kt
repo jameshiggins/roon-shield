@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.WatchLater
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -50,6 +53,11 @@ fun ListenLaterScreen(
     modifier: Modifier = Modifier,
 ) {
     val entries by viewModel.listenLater.collectAsState()
+    val firstFocus = remember { FocusRequester() }
+    // D-pad anchor: land focus on the first saved entry when the screen opens / entries arrive.
+    LaunchedEffect(entries.isNotEmpty()) {
+        if (entries.isNotEmpty()) runCatching { firstFocus.requestFocus() }
+    }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
         Text("Listen Later", color = RoonTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
@@ -68,13 +76,14 @@ fun ListenLaterScreen(
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxSize()) {
-            items(entries, key = { it.title }) { entry ->
+            itemsIndexed(entries, key = { _, it -> it.title }) { index, entry ->
                 RoonListItem(
                     title = entry.title,
                     subtitle = entry.subtitle,
                     imageKey = entry.imageKey,
                     fetchArt = viewModel::loadArt,
                     trailing = { RemoveButton { viewModel.removeListenLater(entry.title) } },
+                    modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
                     onClick = {
                         viewModel.requestSearch(entry.query)
                         onNavigate("search")

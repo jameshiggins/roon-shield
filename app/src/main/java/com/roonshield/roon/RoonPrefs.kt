@@ -50,7 +50,9 @@ class RoonPrefs(private val context: Context) {
     private val listSerializer = ListSerializer(ListenLaterEntry.serializer())
 
     private fun decodeListenLater(raw: String?): List<ListenLaterEntry> =
-        raw?.let { runCatching { RoonJson.decodeFromString(listSerializer, it) }.getOrNull() } ?: emptyList()
+        (raw?.let { runCatching { RoonJson.decodeFromString(listSerializer, it) }.getOrNull() } ?: emptyList())
+            // Old builds could save the action verb ("Play Genre") instead of the item — hide those.
+            .filterNot { BrowseHeuristics.isActionVerb(it.title) }
 
     val listenLater: Flow<List<ListenLaterEntry>> =
         context.dataStore.data.map { decodeListenLater(it[LISTEN_LATER]) }

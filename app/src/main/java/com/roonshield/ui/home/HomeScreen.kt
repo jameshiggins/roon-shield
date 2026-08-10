@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WatchLater
 import androidx.compose.material3.Icon
@@ -68,7 +67,6 @@ private val QUICK = listOf(
     Quick("albums", "Albums", Icons.Filled.Album),
     Quick("artists", "Artists", Icons.Filled.Groups),
     Quick("playlists", "Playlists", Icons.AutoMirrored.Filled.QueueMusic),
-    Quick("radio", "Live Radio", Icons.Filled.Radio),
     Quick("listenlater", "Listen Later", Icons.Filled.WatchLater),
     Quick("search", "Search", Icons.Filled.Search),
 )

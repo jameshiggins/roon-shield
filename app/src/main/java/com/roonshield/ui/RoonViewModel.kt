@@ -12,6 +12,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 enum class Destination(val label: String) {
@@ -104,13 +106,29 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     val screensaver: StateFlow<Boolean> = _screensaver.asStateFlow()
     private var idleJob: Job? = null
 
+    init {
+        // The screensaver only makes sense while music plays: when playback starts, arm the idle
+        // countdown; when it stops while the screensaver is up, drop back to where the user was.
+        viewModelScope.launch {
+            activeZone.map { it?.isPlaying == true }.distinctUntilChanged().collect { playing ->
+                if (playing) restartIdleCountdown()
+                else if (_screensaver.value) _screensaver.value = false
+            }
+        }
+    }
+
     /** Called on any user input. Wakes from the screensaver and restarts the idle countdown. */
     fun onUserInteraction() {
         if (_screensaver.value) _screensaver.value = false
+        restartIdleCountdown()
+    }
+
+    private fun restartIdleCountdown() {
         idleJob?.cancel()
         idleJob = viewModelScope.launch {
             delay(SCREENSAVER_IDLE_MS)
-            _screensaver.value = true
+            // Never take over the screen when nothing is playing.
+            if (activeZone.value?.isPlaying == true) _screensaver.value = true
         }
     }
 
@@ -151,7 +169,7 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun streamingAlbumKeys(): Set<String> = repo.streamingAlbumKeys()
 
     companion object {
-        /** Idle time with no input before the now-playing screensaver appears. */
-        const val SCREENSAVER_IDLE_MS = 15_000L
+        /** Idle time with no input before the now-playing screensaver appears (playing only). */
+        const val SCREENSAVER_IDLE_MS = 30_000L
     }
 }

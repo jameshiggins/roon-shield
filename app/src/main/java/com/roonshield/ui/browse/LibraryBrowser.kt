@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -86,6 +87,9 @@ fun LibraryBrowser(
     style: LibraryStyle = LibraryStyle.Grid,
     header: (@Composable () -> Unit)? = null,
     randomSample: Boolean = false,
+    /** Show a Local Library / Full Library toggle at the root (Albums tab). Local hides albums
+     *  that came from a streaming service's library (Qobuz/TIDAL favorites). */
+    libraryFilterChips: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     // Re-pairing invalidates every server-side item key; keying the root load on the pairing epoch
@@ -183,7 +187,13 @@ fun LibraryBrowser(
     LaunchedEffect(sortMode, canLoadMore, loadingMore) {
         if (sortMode != SortMode.Default && canLoadMore && !loadingMore) loadMore()
     }
-    val displayItems = applySort(items, sortMode, shuffleSeed)
+    var localOnly by remember(sessionKey) { mutableStateOf(true) }
+    val excluded by produceState(initialValue = emptySet<String>(), libraryFilterChips, localOnly, pairingEpoch) {
+        value = if (libraryFilterChips && localOnly) viewModel.streamingAlbumKeys() else emptySet()
+    }
+    val sorted = applySort(items, sortMode, shuffleSeed)
+    val displayItems =
+        if (atRoot && excluded.isNotEmpty()) sorted.filter { albumKey(it) !in excluded } else sorted
     val sorting = sortMode != SortMode.Default && canLoadMore // still loading the full set
     val showSentinel = canLoadMore && sortMode == SortMode.Default
 
@@ -198,6 +208,12 @@ fun LibraryBrowser(
                 if (!atRoot) { Spacer(Modifier.width(12.dp)); Text("· Back goes up", color = RoonTextSecondary, fontSize = 12.sp) }
                 if (loading || sorting) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(color = RoonAccent, modifier = Modifier.size(18.dp)) }
                 Spacer(Modifier.weight(1f))
+                if (libraryFilterChips && atRoot) {
+                    ToggleChip("Local Library", selected = localOnly) { localOnly = true }
+                    Spacer(Modifier.width(8.dp))
+                    ToggleChip("Full Library", selected = !localOnly) { localOnly = false }
+                    Spacer(Modifier.width(12.dp))
+                }
                 if (items.isNotEmpty()) SortChip(sortMode) { showSort = true }
             }
             Spacer(Modifier.height(12.dp))
@@ -224,16 +240,22 @@ fun LibraryBrowser(
                     val anchor = sheetAnchor
                     if (anchor != null) {
                         // If the sheet was opened from a "Play X" action chip, save the thing itself
-                        // (the current level: album/artist/genre) rather than the verb.
-                        val levelTitle = stack.lastOrNull()?.let { it.list?.title ?: it.title }
+                        // (the current level: album/artist/genre) rather than the verb. The action
+                        // list's own title is the second-best source when the level has none.
+                        val levelTitle = stack.lastOrNull()?.let { it.list?.title?.takeIf(String::isNotBlank) ?: it.title.takeIf(String::isNotBlank) }
+                            ?: sheetStack.lastOrNull()?.list?.title?.takeIf { it.isNotBlank() && !BrowseHeuristics.isActionVerb(it) }
                         val effective = if (BrowseHeuristics.isActionVerb(anchor.title) && !levelTitle.isNullOrBlank()) {
                             anchor.copy(title = levelTitle, subtitle = null, imageKey = anchor.imageKey ?: stack.lastOrNull()?.list?.imageKey)
                         } else {
                             anchor
                         }
-                        viewModel.addListenLater(effective)
+                        if (BrowseHeuristics.isActionVerb(effective.title)) {
+                            toast = "Can't save this — open the album or artist first"
+                        } else {
+                            viewModel.addListenLater(effective)
+                            toast = "Added to Listen Later"
+                        }
                     }
-                    toast = "Added to Listen Later"
                     closeSheet()
                 },
                 onDismiss = ::closeSheet,
@@ -421,6 +443,28 @@ private fun ActionChip(label: String, modifier: Modifier = Modifier, onClick: ()
         androidx.compose.material3.Icon(com.roonshield.ui.components.actionIcon(label), contentDescription = null, tint = if (focused) Color.White else RoonAccent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(label, color = if (focused) Color.White else RoonTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (focused) RoonAccent else if (selected) RoonSurface else Color.Transparent)
+            .onFocusState { focused = it }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (focused) Color.White else if (selected) RoonAccent else RoonTextSecondary,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+        )
     }
 }
 

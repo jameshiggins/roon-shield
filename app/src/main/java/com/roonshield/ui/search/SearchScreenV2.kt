@@ -81,13 +81,23 @@ fun SearchScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) {
     val fieldFocus = remember { FocusRequester() }
     val firstItemFocus = remember { FocusRequester() }
 
-    // Prime the search session (Roon requires the hierarchy to be at home before input) and park
-    // focus on the text field so the D-pad always has an anchor.
+    // Prime the search session (Roon requires the hierarchy to be at home before input). If another
+    // screen requested a search (Listen Later), run it immediately; otherwise park focus on the
+    // text field so the D-pad always has an anchor.
     LaunchedEffect(Unit) {
         loading = true
         runCatching { session.home() }
+        val pending = viewModel.consumePendingSearch()
+        if (pending != null) {
+            query = pending
+            submitted = true
+            val res = runCatching { session.input(pending) }.getOrNull()
+            stack.clear()
+            if (res != null) stack.add(res)
+        } else {
+            runCatching { fieldFocus.requestFocus() }
+        }
         loading = false
-        runCatching { fieldFocus.requestFocus() }
     }
 
     val page = stack.lastOrNull()
@@ -119,20 +129,6 @@ fun SearchScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) {
             if (next != null && item.hint != "action" && next.items.isNotEmpty()) {
                 stack.add(next)
             }
-            loading = false
-        }
-    }
-
-    // A query requested from another screen (e.g. Listen Later) runs automatically on entry.
-    LaunchedEffect(Unit) {
-        viewModel.consumePendingSearch()?.let { q ->
-            query = q
-            loading = true
-            submitted = true
-            runCatching { session.home() }
-            val res = runCatching { session.input(q) }.getOrNull()
-            stack.clear()
-            if (res != null) stack.add(res)
             loading = false
         }
     }
