@@ -54,4 +54,24 @@ class SortingTest {
         val items = listOf(item("b"), item("a"))
         assertEquals(items, applySort(items, SortMode.Default, 0))
     }
+
+    @Test
+    fun mostPlayed_sortsByCountDescending_tiesKeepOrder() {
+        val items = listOf(item("Aja", "Steely Dan"), item("Kid A", "Radiohead"), item("Debut", "Björk"))
+        val counts = mapOf(
+            com.roonshield.roon.playCountKey("Kid A", "Radiohead") to 7,
+            com.roonshield.roon.playCountKey("Debut", "Björk") to 2,
+        )
+        val sorted = applySort(items, SortMode.MostPlayed, 0, counts).map { it.title }
+        assertEquals(listOf("Kid A", "Debut", "Aja"), sorted)
+        // No counts at all -> order unchanged.
+        assertEquals(items, applySort(items, SortMode.MostPlayed, 0))
+    }
+
+    @Test
+    fun mostPlayed_fallsBackToTitleOnlyMatch_whenArtistCreditDiffers() {
+        // Play was observed under a different artist credit than the album row shows.
+        val counts = mapOf(com.roonshield.roon.playCountKey("World Clique", "Lady Miss Kier") to 3)
+        assertEquals(3, playScore(item("World Clique", "Deee-Lite"), counts))
+    }
 }

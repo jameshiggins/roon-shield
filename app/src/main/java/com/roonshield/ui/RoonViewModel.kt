@@ -41,6 +41,7 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     val queue = repo.queue
     val discovered = repo.discoveredCores
     val pairingEpoch = repo.pairingEpoch
+    val playCounts = repo.playCounts
 
     /** True after we've been connected at least once this run. While a transient drop is being
      *  reconnected the main UI stays mounted (with an overlay) instead of bouncing to discovery. */

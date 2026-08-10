@@ -96,6 +96,26 @@ class RoonRepository private constructor(context: Context) {
             image = null
         }
         scope.launch { preferredZoneId = prefs.getLastZoneId() }
+        // Album play history: count a play when any zone moves to a new track (Roon's API exposes
+        // no play counts, so "Most played" sorting is fed by what the app observes). A zone's first
+        // sighting after connect is recorded but not counted, so reconnects don't inflate counts.
+        scope.launch {
+            val lastTrackByZone = HashMap<String, String>()
+            zones.collect { zs ->
+                zs.forEach { z ->
+                    val lines = z.nowPlaying?.let { it.threeLine ?: it.twoLine ?: it.oneLine } ?: return@forEach
+                    val track = lines.line1 ?: return@forEach
+                    val album = lines.line3
+                    val sig = "$track|${lines.line2}|$album"
+                    val first = z.zoneId !in lastTrackByZone
+                    if (lastTrackByZone[z.zoneId] == sig) return@forEach
+                    lastTrackByZone[z.zoneId] = sig
+                    if (!first && z.isPlaying && !album.isNullOrBlank()) {
+                        prefs.incrementPlayCount(playCountKey(album, lines.line2))
+                    }
+                }
+            }
+        }
     }
 
     // ---- Connection ----
@@ -254,6 +274,10 @@ class RoonRepository private constructor(context: Context) {
         streamingAlbums = epoch to keys
         return keys
     }
+
+    /** App-observed album play counts, keyed by [playCountKey] — feeds "Most played" sorting. */
+    val playCounts: StateFlow<Map<String, Int>> =
+        prefs.playCounts.stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
     /** True once a Core is paired and browse/transport services are live. */
     val isReady: Boolean get() = browse != null

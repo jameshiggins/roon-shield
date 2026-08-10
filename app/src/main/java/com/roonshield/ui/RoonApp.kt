@@ -215,7 +215,12 @@ private fun MainScaffold(viewModel: RoonViewModel) {
 private fun Content(selected: String, viewModel: RoonViewModel, onSelect: (String) -> Unit) {
     when (selected) {
         "home" -> HomeScreen(viewModel)
-        "albums" -> LibraryBrowser(viewModel, "albums", "albums", "Albums", style = LibraryStyle.Grid, libraryFilterChips = true)
+        "albums" -> LibraryBrowser(
+            viewModel, "albums", "albums", "Albums",
+            style = LibraryStyle.Grid,
+            libraryFilterChips = true,
+            defaultSort = com.roonshield.ui.browse.SortMode.MostPlayed,
+        )
         "artists" -> LibraryBrowser(viewModel, "artists", "artists", "Artists", style = LibraryStyle.Circle)
         "playlists" -> LibraryBrowser(viewModel, "playlists", "playlists", "Playlists", style = LibraryStyle.Grid)
         // Native Roon "Listen Later" tag (Library -> Tags) — full browse with play/queue actions.

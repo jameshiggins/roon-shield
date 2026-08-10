@@ -5,6 +5,7 @@ import com.roonshield.roon.model.BrowseItem
 /** Client-side sort modes for a browse level (Roon's public API has no server-side sort). */
 enum class SortMode(val label: String) {
     Default("Default order"),
+    MostPlayed("Most played"),
     NameAsc("Name (A–Z)"),
     NameDesc("Name (Z–A)"),
     SubtitleAsc("Artist / subtitle (A–Z)"),
@@ -13,15 +14,27 @@ enum class SortMode(val label: String) {
     Shuffle("Shuffle"),
 }
 
-/** Applies a [SortMode] to browse items using their visible fields. Pure + unit-testable. */
-fun applySort(items: List<BrowseItem>, mode: SortMode, seed: Int): List<BrowseItem> = when (mode) {
+/** Applies a [SortMode] to browse items using their visible fields. Pure + unit-testable.
+ *  [playCounts] feeds [SortMode.MostPlayed] (see [playScore]); ties keep the current order. */
+fun applySort(items: List<BrowseItem>, mode: SortMode, seed: Int, playCounts: Map<String, Int> = emptyMap()): List<BrowseItem> = when (mode) {
     SortMode.Default -> items
+    SortMode.MostPlayed -> items.sortedByDescending { playScore(it, playCounts) }
     SortMode.NameAsc -> items.sortedWith(compareBy(NaturalKeyComparator) { it.title.orEmpty() })
     SortMode.NameDesc -> items.sortedWith(compareBy(NaturalKeyComparator) { it.title.orEmpty() }).reversed()
     SortMode.SubtitleAsc -> items.sortedWith(compareBy(NaturalKeyComparator) { it.subtitle.orEmpty() })
     SortMode.SubtitleDesc -> items.sortedWith(compareBy(NaturalKeyComparator) { it.subtitle.orEmpty() }).reversed()
     SortMode.Reverse -> items.reversed()
     SortMode.Shuffle -> items.shuffled(kotlin.random.Random(seed.toLong()))
+}
+
+/** Play count for an album row: exact "title|artist" match first, else any album with the same
+ *  title (covers artist-credit mismatches like "A feat. B" vs the album's primary artist). */
+fun playScore(item: BrowseItem, counts: Map<String, Int>): Int {
+    if (counts.isEmpty()) return 0
+    val title = item.title?.takeIf { it.isNotBlank() } ?: return 0
+    counts[com.roonshield.roon.playCountKey(title, item.subtitle)]?.let { return it }
+    val t = title.trim().lowercase()
+    return counts.entries.filter { it.key.substringBefore('|') == t }.sumOf { it.value }
 }
 
 /** Case-insensitive, digit-aware string comparator so "Track 2" sorts before "Track 10". */
