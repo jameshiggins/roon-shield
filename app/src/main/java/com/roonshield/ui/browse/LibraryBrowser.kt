@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.WatchLater
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -87,11 +86,21 @@ fun LibraryBrowser(
     style: LibraryStyle = LibraryStyle.Grid,
     header: (@Composable () -> Unit)? = null,
     randomSample: Boolean = false,
+    /** How many albums the random sample shows. */
+    sampleSize: Int = 30,
+    /** Fixed column count for the root grid (null = adaptive sizing). */
+    rootColumns: Int? = null,
     /** Show a Local Library / Full Library toggle at the root (Albums tab). Local hides albums
      *  that came from a streaming service's library (Qobuz/TIDAL favorites). */
     libraryFilterChips: Boolean = false,
+    /** Titles to auto-drill through from the hierarchy root before showing the first level —
+     *  e.g. ["Library", "Tags", "Listen Later"] lands on the native Roon "Listen Later" tag. */
+    rootPath: List<String> = emptyList(),
 ) {
     val scope = rememberCoroutineScope()
+    // While music plays, only non-interrupting actions (Add Next / Queue) are offered.
+    val activeZone by viewModel.activeZone.collectAsState()
+    val playing = activeZone?.isPlaying == true
     // Re-pairing invalidates every server-side item key; keying the root load on the pairing epoch
     // reloads this level after a reconnect while the screen itself stays mounted.
     val pairingEpoch by viewModel.pairingEpoch.collectAsState()
@@ -111,8 +120,18 @@ fun LibraryBrowser(
     LaunchedEffect(sessionKey, pairingEpoch) {
         loading = true
         stack.clear(); sheetStack.clear()
-        val home = session.home()
-        stack.add(if (randomSample) buildRandomSample(session, home, viewModel.streamingAlbumKeys()) else home)
+        var home = session.home()
+        for (title in rootPath) {
+            val match = home.items.firstOrNull { it.title.equals(title, ignoreCase = true) }
+                ?: home.items.firstOrNull { it.title?.contains(title, ignoreCase = true) == true }
+            val key = match?.itemKey
+            if (key == null) {
+                home = BrowsePage(message = "\"$title\" not found in Roon. Create a \"$title\" tag in the Roon app (tag albums or artists), and it appears here.")
+                break
+            }
+            home = session.open(key)
+        }
+        stack.add(if (randomSample) buildRandomSample(session, home, viewModel.streamingAlbumKeys(), sampleSize) else home)
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2200); toast = null } }
@@ -221,43 +240,26 @@ fun LibraryBrowser(
             if (items.isEmpty() && !loading) {
                 Text(page?.message ?: "Nothing here.", color = RoonTextSecondary, fontSize = 14.sp)
             } else if (!atRoot && !BrowseHeuristics.looksLikeGrid(items)) {
-                DetailView(page, displayItems, viewModel, firstFocus, showSentinel, ::loadMore, ::open)
+                DetailView(page, displayItems, viewModel, firstFocus, showSentinel, playing, ::loadMore, ::open)
             } else {
-                GridView(displayItems, if (atRoot) style else LibraryStyle.Grid, viewModel, if (atRoot) header else null, firstFocus, showSentinel, ::loadMore, ::open)
+                GridView(displayItems, if (atRoot) style else LibraryStyle.Grid, viewModel, if (atRoot) header else null, firstFocus, showSentinel, if (atRoot) rootColumns else null, ::loadMore, ::open)
             }
         }
 
         if (sheetStack.isNotEmpty()) {
+            // While playing, offer only Add Next / Queue so a stray click can't cut the music.
+            // (If Roon offers no queue-safe action here — e.g. a radio stream — show the full set.)
+            val rawActions = sheetStack.last().items
+            val sheetActions = if (playing) rawActions.filter(::isQueueSafe).ifEmpty { rawActions } else rawActions
             ActionSheet(
                 heading = sheetAnchor?.title,
                 subheading = sheetAnchor?.subtitle,
                 imageKey = sheetAnchor?.imageKey,
                 fetchArt = viewModel::loadArt,
-                actions = sheetStack.last().items,
-                extraActions = listOf(SheetAction("listen_later", "Add to Listen Later", Icons.Filled.WatchLater)),
+                actions = sheetActions,
+                extraActions = emptyList(),
                 onPick = ::pickAction,
-                onExtra = {
-                    val anchor = sheetAnchor
-                    if (anchor != null) {
-                        // If the sheet was opened from a "Play X" action chip, save the thing itself
-                        // (the current level: album/artist/genre) rather than the verb. The action
-                        // list's own title is the second-best source when the level has none.
-                        val levelTitle = stack.lastOrNull()?.let { it.list?.title?.takeIf(String::isNotBlank) ?: it.title.takeIf(String::isNotBlank) }
-                            ?: sheetStack.lastOrNull()?.list?.title?.takeIf { it.isNotBlank() && !BrowseHeuristics.isActionVerb(it) }
-                        val effective = if (BrowseHeuristics.isActionVerb(anchor.title) && !levelTitle.isNullOrBlank()) {
-                            anchor.copy(title = levelTitle, subtitle = null, imageKey = anchor.imageKey ?: stack.lastOrNull()?.list?.imageKey)
-                        } else {
-                            anchor
-                        }
-                        if (BrowseHeuristics.isActionVerb(effective.title)) {
-                            toast = "Can't save this — open the album or artist first"
-                        } else {
-                            viewModel.addListenLater(effective)
-                            toast = "Added to Listen Later"
-                        }
-                    }
-                    closeSheet()
-                },
+                onExtra = {},
                 onDismiss = ::closeSheet,
             )
         }
@@ -298,10 +300,10 @@ fun LibraryBrowser(
  *  and shuffled, excluding streaming-service library albums so only the local library shows.
  *  Seeded by the calendar day, so the selection is the same all day (and across reconnects) and
  *  rolls over to a fresh one each morning. */
-private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage, excluded: Set<String>): BrowsePage {
+private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage, excluded: Set<String>, sampleSize: Int): BrowsePage {
     fun keep(item: BrowseItem) = excluded.isEmpty() || albumKey(item) !in excluded
     val total = home.list?.count ?: home.items.size
-    if (total <= 30) {
+    if (total <= sampleSize) {
         val items = home.items.filter(::keep)
         return BrowsePage(list = home.list?.copy(count = items.size), items = items, level = 0)
     }
@@ -309,7 +311,7 @@ private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage, 
     val windowSize = 6
     val collected = LinkedHashMap<String, BrowseItem>()
     var tries = 0
-    while (collected.size < 30 && tries < 20) {
+    while (collected.size < sampleSize && tries < 20) {
         tries++
         val off = rnd.nextInt(0, (total - windowSize).coerceAtLeast(1))
         val window = runCatching { session.page(off, windowSize) }.getOrNull().orEmpty()
@@ -318,8 +320,14 @@ private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage, 
         }
     }
     if (collected.isEmpty()) return home
-    val items = collected.values.toList().shuffled(rnd)
+    val items = collected.values.toList().shuffled(rnd).take(sampleSize)
     return BrowsePage(list = home.list?.copy(count = items.size), items = items, level = 0)
+}
+
+/** While music is playing, the only allowed actions are the non-interrupting ones. */
+private fun isQueueSafe(item: BrowseItem): Boolean {
+    val t = item.title?.lowercase() ?: return false
+    return "next" in t || "queue" in t
 }
 
 @Composable
@@ -330,6 +338,7 @@ private fun GridView(
     header: (@Composable () -> Unit)?,
     firstFocus: FocusRequester,
     canLoadMore: Boolean,
+    columns: Int?,
     onLoadMore: () -> Unit,
     onOpen: (BrowseItem) -> Unit,
 ) {
@@ -349,7 +358,7 @@ private fun GridView(
     }
     val minSize = if (style == LibraryStyle.Circle) 150.dp else if (style == LibraryStyle.Tile) 200.dp else 172.dp
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize),
+        columns = if (columns != null) GridCells.Fixed(columns) else GridCells.Adaptive(minSize),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize(),
@@ -377,10 +386,13 @@ private fun LoadMoreSentinel(onLoadMore: () -> Unit) {
 }
 
 @Composable
-private fun DetailView(page: BrowsePage?, items: List<BrowseItem>, viewModel: RoonViewModel, firstFocus: FocusRequester, canLoadMore: Boolean, onLoadMore: () -> Unit, onOpen: (BrowseItem) -> Unit) {
+private fun DetailView(page: BrowsePage?, items: List<BrowseItem>, viewModel: RoonViewModel, firstFocus: FocusRequester, canLoadMore: Boolean, playing: Boolean, onLoadMore: () -> Unit, onOpen: (BrowseItem) -> Unit) {
     // Header "chips" are verb actions (Play Album, Shuffle, Start Radio). Everything else — tracks and
-    // sub-lists, even though tracks are action_list items — renders as rows.
-    val actions = items.filter { (it.hint == "action" || it.hint == "action_list") && BrowseHeuristics.isActionVerb(it.title) }
+    // sub-lists, even though tracks are action_list items — renders as rows. While music plays,
+    // direct-action chips that would interrupt are hidden (action_list chips open a filtered sheet).
+    val actions = items
+        .filter { (it.hint == "action" || it.hint == "action_list") && BrowseHeuristics.isActionVerb(it.title) }
+        .filter { !playing || it.hint == "action_list" || isQueueSafe(it) }
     val rows = items.filterNot { (it.hint == "action" || it.hint == "action_list") && BrowseHeuristics.isActionVerb(it.title) }
     val headerImage = page?.list?.imageKey ?: items.firstOrNull { !it.imageKey.isNullOrEmpty() }?.imageKey
 

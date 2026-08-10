@@ -23,6 +23,14 @@ functionality from Roon's public Extension API in our own Roon-styled UI (no cop
   ▶ again switches to the artist. (Roon's public API exposes none of the native TiVo review/bio
   text, so Wikipedia is the source; lookups sanitize "(2009 Remaster)"-style noise and reject
   same-name non-music articles.)
+- **Playing-safe actions** — while music plays, action sheets and detail chips offer only
+  non-interrupting actions (Add Next / Queue); the full set returns when stopped/paused.
+- **Home v2** — quick tiles removed; "Today's Albums" is a fixed 4-per-row grid of 12 daily picks.
+- **Listen Later = native Roon tag** — the tab drills to Library → Tags → "Listen Later" with full
+  play/queue actions. (Roon 2.5's built-in Listen Later list is NOT exposed by the Extension API —
+  verified live: root/Library/Tags/Playlists contain no such node — so a same-named tag is the
+  closest reachable equivalent. App-local bookmarks and the "Add to Listen Later" sheet action were
+  removed; tagging happens in the Roon app.)
 - Discovery/pairing, Now Playing, Queue, Search, Zones/volume footer, silent reconnect, keep-screen-on.
 
 ## Won't do (hard Roon public-API limitations, documented in README)

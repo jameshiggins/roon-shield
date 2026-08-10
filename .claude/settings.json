@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Write-Output *)",
+      "PowerShell(Start-Sleep *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-Service *)",
+      "PowerShell(Get-WinEvent *)",
+      "PowerShell(Get-ScheduledTask *)",
+      "PowerShell(Get-ItemProperty *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Select-String *)",
+      "PowerShell(schtasks /query *)",
+      "PowerShell(adb logcat *)",
+      "PowerShell(adb devices *)",
+      "PowerShell(adb connect 192.168.50.195:5555)",
+      "PowerShell(npm test)",
+      "Bash(adb logcat *)",
+      "Bash(adb devices *)",
+      "Bash(adb connect 192.168.50.195:5555)",
+      "Bash(npm test)",
+      "PowerShell($env:JAVA_HOME = 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.19.10-hotspot'; .\\gradlew.bat --no-daemon *)",
+      "PowerShell(.\\gradlew.bat --no-daemon *)",
+      "PowerShell(C:\\Android\\platform-tools\\adb.exe *)",
+      "PowerShell($adb = 'C:\\Android\\platform-tools\\adb.exe'; *)",
+      "PowerShell(.\\scripts\\deploy.ps1 *)",
+      "Bash(adb *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "mcp__claude-in-chrome__find",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__read_network_requests",
+      "mcp__claude-in-chrome__read_console_messages"
+    ]
+  }
+}

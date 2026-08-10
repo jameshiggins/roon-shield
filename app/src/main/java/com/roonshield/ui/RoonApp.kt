@@ -47,7 +47,6 @@ import com.roonshield.ui.components.NowPlayingBar
 import com.roonshield.ui.components.RoonLogo
 import com.roonshield.ui.connect.ConnectScreen
 import com.roonshield.ui.home.HomeScreen
-import com.roonshield.ui.listenlater.ListenLaterScreen
 import com.roonshield.ui.nowplaying.NowPlayingScreenV2
 import com.roonshield.ui.queue.QueueScreenV2
 import com.roonshield.ui.search.SearchScreenV2
@@ -215,11 +214,16 @@ private fun MainScaffold(viewModel: RoonViewModel) {
 @Composable
 private fun Content(selected: String, viewModel: RoonViewModel, onSelect: (String) -> Unit) {
     when (selected) {
-        "home" -> HomeScreen(viewModel, onNavigate = onSelect)
+        "home" -> HomeScreen(viewModel)
         "albums" -> LibraryBrowser(viewModel, "albums", "albums", "Albums", style = LibraryStyle.Grid, libraryFilterChips = true)
         "artists" -> LibraryBrowser(viewModel, "artists", "artists", "Artists", style = LibraryStyle.Circle)
         "playlists" -> LibraryBrowser(viewModel, "playlists", "playlists", "Playlists", style = LibraryStyle.Grid)
-        "listenlater" -> ListenLaterScreen(viewModel, onNavigate = onSelect)
+        // Native Roon "Listen Later" tag (Library -> Tags) — full browse with play/queue actions.
+        "listenlater" -> LibraryBrowser(
+            viewModel, "listenlater", "browse", "Listen Later",
+            style = LibraryStyle.Grid,
+            rootPath = listOf("Library", "Tags", "Listen Later"),
+        )
         "search" -> SearchScreenV2(viewModel)
         "queue" -> QueueScreenV2(viewModel)
         "settings" -> SettingsScreen(viewModel)
