@@ -78,6 +78,13 @@ class RoonRepository private constructor(context: Context) {
             }
             .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    private val _recentlyPlayed = MutableStateFlow<Map<String, List<PlayedTrack>>>(emptyMap())
+    /** Per-zone recently played tracks (newest first), observed this app run. */
+    val recentlyPlayed: StateFlow<Map<String, List<PlayedTrack>>> = _recentlyPlayed
+
+    private val _listenLaterAvailable = MutableStateFlow(false)
+    val listenLaterAvailable: StateFlow<Boolean> = _listenLaterAvailable
+
     init {
         core.onPaired = {
             val m = core.moo
@@ -96,26 +103,56 @@ class RoonRepository private constructor(context: Context) {
             image = null
         }
         scope.launch { preferredZoneId = prefs.getLastZoneId() }
-        // Album play history: count a play when any zone moves to a new track (Roon's API exposes
-        // no play counts, so "Most played" sorting is fed by what the app observes). A zone's first
-        // sighting after connect is recorded but not counted, so reconnects don't inflate counts.
+        // Album play history + per-zone recently-played: when any zone moves to a new track,
+        // count the album play (Roon's API exposes no play counts, so "Most played" is fed by
+        // what the app observes) and push the previous track into that zone's history. A zone's
+        // first sighting after connect is recorded but not counted, so reconnects don't inflate.
         scope.launch {
-            val lastTrackByZone = HashMap<String, String>()
+            val lastTrackByZone = HashMap<String, Pair<String, PlayedTrack>>()
             zones.collect { zs ->
                 zs.forEach { z ->
-                    val lines = z.nowPlaying?.let { it.threeLine ?: it.twoLine ?: it.oneLine } ?: return@forEach
+                    val np = z.nowPlaying ?: return@forEach
+                    val lines = np.threeLine ?: np.twoLine ?: np.oneLine ?: return@forEach
                     val track = lines.line1 ?: return@forEach
                     val album = lines.line3
                     val sig = "$track|${lines.line2}|$album"
-                    val first = z.zoneId !in lastTrackByZone
-                    if (lastTrackByZone[z.zoneId] == sig) return@forEach
-                    lastTrackByZone[z.zoneId] = sig
-                    if (!first && z.isPlaying && !album.isNullOrBlank()) {
-                        prefs.incrementPlayCount(playCountKey(album, lines.line2))
+                    val prev = lastTrackByZone[z.zoneId]
+                    if (prev?.first == sig) return@forEach
+                    lastTrackByZone[z.zoneId] = sig to PlayedTrack(track, lines.line2, np.imageKey)
+                    if (prev != null) {
+                        val hist = _recentlyPlayed.value[z.zoneId].orEmpty()
+                        _recentlyPlayed.value =
+                            _recentlyPlayed.value + (z.zoneId to (listOf(prev.second) + hist).take(15))
+                        if (z.isPlaying && !album.isNullOrBlank()) {
+                            val key = playCountKey(album, lines.line2)
+                            RoonLog.i("Plays", "play +1 for [$key] on ${z.displayName}")
+                            prefs.incrementPlayCount(key)
+                        }
                     }
                 }
             }
         }
+        // The native "Listen Later" tag is optional — the nav entry only shows when it exists.
+        scope.launch {
+            pairingEpoch.collect { epoch ->
+                if (epoch > 0) {
+                    _listenLaterAvailable.value = runCatching { probeListenLaterTag() }
+                        .onFailure { RoonLog.w("Repo", "Listen Later tag probe failed: ${it.message}") }
+                        .getOrDefault(false)
+                    RoonLog.i("Repo", "Listen Later tag available: ${_listenLaterAvailable.value}")
+                }
+            }
+        }
+    }
+
+    private suspend fun probeListenLaterTag(): Boolean {
+        val session = BrowseSession(this, "lltag-probe", "browse")
+        var page = session.home()
+        for (title in listOf("Library", "Tags")) {
+            val key = page.items.firstOrNull { it.title.equals(title, ignoreCase = true) }?.itemKey ?: return false
+            page = session.open(key)
+        }
+        return page.items.any { it.title?.contains("listen later", ignoreCase = true) == true }
     }
 
     // ---- Connection ----

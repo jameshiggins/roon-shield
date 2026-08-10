@@ -152,13 +152,19 @@ internal fun NowPlayingInfoPanel(
                 else -> Column {
                     Text(entry!!.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
+                    val paragraphs = remember(entry) {
+                        entry!!.extract.split(Regex("\n+")).map(String::trim).filter(String::isNotEmpty)
+                    }
                     Column(modifier = Modifier.verticalScroll(scroll)) {
-                        Text(
-                            entry!!.extract,
-                            color = Color.White.copy(alpha = 0.88f),
-                            fontSize = 15.sp,
-                            lineHeight = 23.sp,
-                        )
+                        paragraphs.forEachIndexed { i, paragraph ->
+                            if (i > 0) Spacer(Modifier.height(14.dp))
+                            Text(
+                                paragraph,
+                                color = Color.White.copy(alpha = 0.88f),
+                                fontSize = 15.sp,
+                                lineHeight = 23.sp,
+                            )
+                        }
                     }
                 }
             }

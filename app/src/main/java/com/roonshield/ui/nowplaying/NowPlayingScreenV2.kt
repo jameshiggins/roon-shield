@@ -94,10 +94,13 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
     val infoSubjects = remember(lines?.line2, lines?.line3) { buildInfoSubjects(lines?.line3, lines?.line2) }
     var infoIndex by remember { mutableStateOf<Int?>(null) }
     if (infoIndex != null && infoIndex!! >= infoSubjects.size) infoIndex = if (infoSubjects.isEmpty()) null else 0
-    // Reading is idle time to the screensaver — keep resetting the countdown while the panel is
+    // Queue overlay: ▲ above the scrubber opens it.
+    var queueOpen by remember { mutableStateOf(false) }
+    val panelOpen = infoIndex != null || queueOpen
+    // Reading is idle time to the screensaver — keep resetting the countdown while a panel is
     // open so a long bio doesn't end with the next key press being eaten as a "wake".
-    LaunchedEffect(infoIndex != null) {
-        while (infoIndex != null) {
+    LaunchedEffect(panelOpen) {
+        while (infoIndex != null || queueOpen) {
             viewModel.onUserInteraction()
             delay(5000)
         }
@@ -107,17 +110,28 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
         infoIndex = null
         runCatching { playFocus.requestFocus() }
     }
+    fun closeQueue() {
+        queueOpen = false
+        runCatching { playFocus.requestFocus() }
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
             .onKeyEvent { ev ->
-                if (infoIndex == null && ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionDown && infoSubjects.isNotEmpty()) {
-                    if (!focusManager.moveFocus(FocusDirection.Down)) infoIndex = 0
-                    true
-                } else {
-                    false
+                if (panelOpen || ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (ev.key) {
+                    Key.DirectionDown -> {
+                        if (infoSubjects.isEmpty()) return@onKeyEvent false
+                        if (!focusManager.moveFocus(FocusDirection.Down)) infoIndex = 0
+                        true
+                    }
+                    Key.DirectionUp -> {
+                        if (!focusManager.moveFocus(FocusDirection.Up)) queueOpen = true
+                        true
+                    }
+                    else -> false
                 }
             },
     ) {
@@ -231,6 +245,14 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
                 subjects = infoSubjects,
                 index = infoIndex!!,
                 onSelect = { infoIndex = it },
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+        if (queueOpen) {
+            BackHandler { closeQueue() }
+            NowPlayingQueuePanel(
+                viewModel = viewModel,
+                onClose = ::closeQueue,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }

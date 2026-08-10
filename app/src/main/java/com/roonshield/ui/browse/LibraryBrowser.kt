@@ -217,8 +217,14 @@ fun LibraryBrowser(
         if (effectiveSort != SortMode.Default && canLoadMore && !loadingMore) loadMore()
     }
     val sorted = applySort(items, effectiveSort, shuffleSeed, playCounts)
-    val displayItems =
+    val filtered =
         if (atRoot && excluded.isNotEmpty()) sorted.filter { albumKey(it) !in excluded } else sorted
+    // Make the most-played ordering legible: show each album's observed play count.
+    val displayItems = if (effectiveSort != SortMode.MostPlayed) filtered else filtered.map { item ->
+        val n = playScore(item, playCounts)
+        if (n <= 0) item
+        else item.copy(subtitle = listOfNotNull(item.subtitle, "$n ${if (n == 1) "play" else "plays"}").joinToString("  ·  "))
+    }
     val sorting = effectiveSort != SortMode.Default && canLoadMore // still loading the full set
     val showSentinel = canLoadMore && effectiveSort == SortMode.Default
 

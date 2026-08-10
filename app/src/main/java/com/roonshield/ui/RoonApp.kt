@@ -130,6 +130,10 @@ private fun MainScaffold(viewModel: RoonViewModel) {
     val firstNavFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
 
+    // Listen Later only appears when the Core actually has the tag.
+    val listenLaterAvailable by viewModel.listenLaterAvailable.collectAsState()
+    val navItems = if (listenLaterAvailable) NAV_ITEMS else NAV_ITEMS.filter { it.id != "listenlater" }
+
     // Idle screensaver: after 15s of no input the app drops into full-screen Now Playing; any key wakes
     // it (handled in the Activity) and returns to where you were.
     val screensaver by viewModel.screensaver.collectAsState()
@@ -171,7 +175,7 @@ private fun MainScaffold(viewModel: RoonViewModel) {
             ) {
                 RoonLogo(height = 22.dp, tint = RoonTextPrimary)
                 Spacer(Modifier.height(14.dp))
-                NAV_ITEMS.forEachIndexed { index, item ->
+                navItems.forEachIndexed { index, item ->
                     NavRailItem(
                         label = item.label,
                         icon = item.icon,
