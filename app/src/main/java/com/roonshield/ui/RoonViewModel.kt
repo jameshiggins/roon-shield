@@ -41,7 +41,6 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     val queue = repo.queue
     val discovered = repo.discoveredCores
     val pairingEpoch = repo.pairingEpoch
-    val playCounts = repo.playCounts
     val recentlyPlayed = repo.recentlyPlayed
     val listenLaterAvailable = repo.listenLaterAvailable
 

@@ -9,8 +9,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.MapSerializer
-import kotlinx.serialization.builtins.serializer
 
 private val Context.dataStore by preferencesDataStore(name = "roon")
 
@@ -73,29 +71,10 @@ class RoonPrefs(private val context: Context) {
         }
     }
 
-    // ---- Album play history (app-observed; Roon exposes no play counts) ----
-
-    private val countsSerializer = MapSerializer(String.serializer(), Int.serializer())
-
-    private fun decodeCounts(raw: String?): Map<String, Int> =
-        raw?.let { runCatching { RoonJson.decodeFromString(countsSerializer, it) }.getOrNull() } ?: emptyMap()
-
-    val playCounts: Flow<Map<String, Int>> =
-        context.dataStore.data.map { decodeCounts(it[PLAY_COUNTS]) }
-
-    suspend fun incrementPlayCount(key: String) {
-        context.dataStore.edit { prefs ->
-            val current = decodeCounts(prefs[PLAY_COUNTS]).toMutableMap()
-            current[key] = (current[key] ?: 0) + 1
-            prefs[PLAY_COUNTS] = RoonJson.encodeToString(countsSerializer, current)
-        }
-    }
-
     private companion object {
         val LAST_HOST = stringPreferencesKey("last_host")
         val LAST_PORT = intPreferencesKey("last_port")
         val LAST_ZONE = stringPreferencesKey("last_zone")
         val LISTEN_LATER = stringPreferencesKey("listen_later")
-        val PLAY_COUNTS = stringPreferencesKey("play_counts")
     }
 }

@@ -96,8 +96,6 @@ fun LibraryBrowser(
     /** Titles to auto-drill through from the hierarchy root before showing the first level —
      *  e.g. ["Library", "Tags", "Listen Later"] lands on the native Roon "Listen Later" tag. */
     rootPath: List<String> = emptyList(),
-    /** Sort applied to the root level when the screen opens (deeper levels stay in Roon order). */
-    defaultSort: SortMode = SortMode.Default,
 ) {
     val scope = rememberCoroutineScope()
     // While music plays, only non-interrupting actions (Add Next / Queue) are offered.
@@ -182,12 +180,12 @@ fun LibraryBrowser(
     val extra = remember(sessionKey) { mutableStateListOf<BrowseItem>() }
     var loadingMore by remember(sessionKey) { mutableStateOf(false) }
     var reachedEnd by remember(sessionKey) { mutableStateOf(false) }
-    var sortMode by remember(sessionKey) { mutableStateOf(defaultSort) }
+    var sortMode by remember(sessionKey) { mutableStateOf(SortMode.Default) }
     var shuffleSeed by remember(sessionKey) { mutableStateOf(1) }
     var showSort by remember(sessionKey) { mutableStateOf(false) }
     LaunchedEffect(stack.size, sheetStack.size) {
         extra.clear(); loadingMore = false; reachedEnd = false; showSort = false
-        sortMode = if (stack.size <= 1) defaultSort else SortMode.Default
+        sortMode = SortMode.Default
     }
     val baseItems = page?.items ?: emptyList()
     val items = if (extra.isEmpty()) baseItems else baseItems + extra
@@ -209,24 +207,15 @@ fun LibraryBrowser(
     val excluded by produceState(initialValue = emptySet<String>(), libraryFilterChips, localOnly, pairingEpoch) {
         value = if (libraryFilterChips && localOnly) viewModel.streamingAlbumKeys() else emptySet()
     }
-    val playCounts by viewModel.playCounts.collectAsState()
-    // Most-played with no history yet behaves as Default (no reorder, no eager full pagination).
-    val effectiveSort = if (sortMode == SortMode.MostPlayed && playCounts.isEmpty()) SortMode.Default else sortMode
     // A sort must cover the whole level, so eagerly page through everything while a sort is active.
-    LaunchedEffect(effectiveSort, canLoadMore, loadingMore) {
-        if (effectiveSort != SortMode.Default && canLoadMore && !loadingMore) loadMore()
+    LaunchedEffect(sortMode, canLoadMore, loadingMore) {
+        if (sortMode != SortMode.Default && canLoadMore && !loadingMore) loadMore()
     }
-    val sorted = applySort(items, effectiveSort, shuffleSeed, playCounts)
-    val filtered =
+    val sorted = applySort(items, sortMode, shuffleSeed)
+    val displayItems =
         if (atRoot && excluded.isNotEmpty()) sorted.filter { albumKey(it) !in excluded } else sorted
-    // Make the most-played ordering legible: show each album's observed play count.
-    val displayItems = if (effectiveSort != SortMode.MostPlayed) filtered else filtered.map { item ->
-        val n = playScore(item, playCounts)
-        if (n <= 0) item
-        else item.copy(subtitle = listOfNotNull(item.subtitle, "$n ${if (n == 1) "play" else "plays"}").joinToString("  ·  "))
-    }
-    val sorting = effectiveSort != SortMode.Default && canLoadMore // still loading the full set
-    val showSentinel = canLoadMore && effectiveSort == SortMode.Default
+    val sorting = sortMode != SortMode.Default && canLoadMore // still loading the full set
+    val showSentinel = canLoadMore && sortMode == SortMode.Default
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp)) {

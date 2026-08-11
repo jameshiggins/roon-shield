@@ -103,10 +103,8 @@ class RoonRepository private constructor(context: Context) {
             image = null
         }
         scope.launch { preferredZoneId = prefs.getLastZoneId() }
-        // Album play history + per-zone recently-played: when any zone moves to a new track,
-        // count the album play (Roon's API exposes no play counts, so "Most played" is fed by
-        // what the app observes) and push the previous track into that zone's history. A zone's
-        // first sighting after connect is recorded but not counted, so reconnects don't inflate.
+        // Per-zone recently-played history: when any zone moves to a new track, push the previous
+        // one into that zone's history (feeds the queue panel — Roon's API serves no history).
         scope.launch {
             val lastTrackByZone = HashMap<String, Pair<String, PlayedTrack>>()
             zones.collect { zs ->
@@ -114,8 +112,7 @@ class RoonRepository private constructor(context: Context) {
                     val np = z.nowPlaying ?: return@forEach
                     val lines = np.threeLine ?: np.twoLine ?: np.oneLine ?: return@forEach
                     val track = lines.line1 ?: return@forEach
-                    val album = lines.line3
-                    val sig = "$track|${lines.line2}|$album"
+                    val sig = "$track|${lines.line2}|${lines.line3}"
                     val prev = lastTrackByZone[z.zoneId]
                     if (prev?.first == sig) return@forEach
                     lastTrackByZone[z.zoneId] = sig to PlayedTrack(track, lines.line2, np.imageKey)
@@ -123,11 +120,6 @@ class RoonRepository private constructor(context: Context) {
                         val hist = _recentlyPlayed.value[z.zoneId].orEmpty()
                         _recentlyPlayed.value =
                             _recentlyPlayed.value + (z.zoneId to (listOf(prev.second) + hist).take(15))
-                        if (z.isPlaying && !album.isNullOrBlank()) {
-                            val key = playCountKey(album, lines.line2)
-                            RoonLog.i("Plays", "play +1 for [$key] on ${z.displayName}")
-                            prefs.incrementPlayCount(key)
-                        }
                     }
                 }
             }
@@ -311,10 +303,6 @@ class RoonRepository private constructor(context: Context) {
         streamingAlbums = epoch to keys
         return keys
     }
-
-    /** App-observed album play counts, keyed by [playCountKey] — feeds "Most played" sorting. */
-    val playCounts: StateFlow<Map<String, Int>> =
-        prefs.playCounts.stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
     /** True once a Core is paired and browse/transport services are live. */
     val isReady: Boolean get() = browse != null
