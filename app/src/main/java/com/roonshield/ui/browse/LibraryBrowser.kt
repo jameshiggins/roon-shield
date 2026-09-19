@@ -135,6 +135,14 @@ fun LibraryBrowser(
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2200); toast = null } }
+    // Roon lists playlists without artwork — fill covers in from their tracks in the background.
+    if (rootHierarchy == "playlists") {
+        remember { PlaylistCovers.restore(viewModel) } // persisted covers show before any browsing
+        val rootLoaded = stack.isNotEmpty()
+        LaunchedEffect(pairingEpoch, rootLoaded) {
+            if (rootLoaded) runCatching { PlaylistCovers.resolve(viewModel) }
+        }
+    }
 
     fun closeSheet() {
         scope.launch { repeat(sheetStack.size) { session.back() }; sheetStack.clear(); sheetAnchor = null }
@@ -251,7 +259,8 @@ fun LibraryBrowser(
             // While playing, offer only Add Next / Queue so a stray click can't cut the music.
             // (If Roon offers no queue-safe action here — e.g. a radio stream — show the full set.)
             val rawActions = sheetStack.last().items
-            val sheetActions = if (playing) rawActions.filter(::isQueueSafe).ifEmpty { rawActions } else rawActions
+            val ordered = rawActions.filterNot(::isPlayNow) + rawActions.filter(::isPlayNow)
+            val sheetActions = if (playing) ordered.filter(::isQueueSafe).ifEmpty { ordered } else ordered
             ActionSheet(
                 heading = sheetAnchor?.title,
                 subheading = sheetAnchor?.subtitle,
@@ -312,7 +321,8 @@ private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage, 
     val windowSize = 6
     val collected = LinkedHashMap<String, BrowseItem>()
     var tries = 0
-    while (collected.size < sampleSize && tries < 20) {
+    val maxTries = (sampleSize / windowSize * 4).coerceAtLeast(20) // headroom for excluded/duplicate picks
+    while (collected.size < sampleSize && tries < maxTries) {
         tries++
         val off = rnd.nextInt(0, (total - windowSize).coerceAtLeast(1))
         val window = runCatching { session.page(off, windowSize) }.getOrNull().orEmpty()
@@ -329,6 +339,12 @@ private suspend fun buildRandomSample(session: BrowseSession, home: BrowsePage, 
 private fun isQueueSafe(item: BrowseItem): Boolean {
     val t = item.title?.lowercase() ?: return false
     return "next" in t || "queue" in t
+}
+
+/** "Play Now" / "Play" — the interrupting action we sort to the bottom of the sheet. */
+private fun isPlayNow(item: BrowseItem): Boolean {
+    val t = item.title?.lowercase() ?: return false
+    return "play now" in t || t == "play" || "play from here" in t
 }
 
 @Composable
@@ -357,7 +373,9 @@ private fun GridView(
         }
         return
     }
-    val minSize = if (style == LibraryStyle.Circle) 150.dp else if (style == LibraryStyle.Tile) 200.dp else 172.dp
+    // Adaptive poster grids are dense: half the old 150/172dp cells (2x the columns).
+    val compact = columns == null && style != LibraryStyle.Tile
+    val minSize = if (style == LibraryStyle.Circle) 76.dp else if (style == LibraryStyle.Tile) 200.dp else 104.dp
     LazyVerticalGrid(
         columns = if (columns != null) GridCells.Fixed(columns) else GridCells.Adaptive(minSize),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -370,7 +388,8 @@ private fun GridView(
             if (style == LibraryStyle.Tile && item.imageKey.isNullOrEmpty()) {
                 ColorTile(item.title ?: "—", modifier = focusMod) { onOpen(item) }
             } else {
-                PosterCard(item.title, item.subtitle, item.imageKey, viewModel::loadArt, modifier = focusMod, circular = style == LibraryStyle.Circle, onClick = { onOpen(item) })
+                val derived = if (item.imageKey.isNullOrEmpty()) PlaylistCovers.byTitle[item.title].orEmpty() else emptyList()
+                PosterCard(item.title, item.subtitle, item.imageKey, viewModel::loadArt, modifier = focusMod, circular = style == LibraryStyle.Circle, mosaicKeys = derived, compact = compact, onClick = { onOpen(item) })
             }
         }
         if (canLoadMore) item(span = { GridItemSpan(maxLineSpan) }) { LoadMoreSentinel(onLoadMore) }

@@ -272,8 +272,11 @@ class RoonRepository private constructor(context: Context) {
         multiSessionKey = multiSessionKey,
     )
 
+    private val imageDisk = ImageDiskCache(context.applicationContext).also { scope.launch { it.trim() } }
+
     suspend fun loadImage(imageKey: String, width: Int, height: Int): ByteArray? =
-        image?.getImage(imageKey, width, height)
+        imageDisk.get(imageKey, width, height)
+            ?: image?.getImage(imageKey, width, height)?.also { imageDisk.put(imageKey, width, height, it) }
 
     // ---- Listen Later (app-local) ----
 

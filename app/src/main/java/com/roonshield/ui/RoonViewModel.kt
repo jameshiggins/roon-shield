@@ -34,6 +34,19 @@ class RoonViewModel(app: Application) : AndroidViewModel(app) {
     /** Optional initial tab (deep-link / testing via `--es start_tab <id>`). */
     var initialTab: String? = null
 
+    /** Bumped each time the app comes to the foreground; the UI re-runs its "land on Now Playing
+     *  if music is already going" routing on every change. */
+    private val _openEpoch = MutableStateFlow(0)
+    val openEpoch: StateFlow<Int> = _openEpoch.asStateFlow()
+    fun onAppOpened() { _openEpoch.value++ }
+
+    /** A `start_tab` deep link delivered to the already-running app (onNewIntent) — e.g. the
+     *  Nanoleaf extension opening Now Playing over adb when music starts. */
+    private val _tabRequest = MutableStateFlow<String?>(null)
+    val tabRequest: StateFlow<String?> = _tabRequest.asStateFlow()
+    fun requestTab(tab: String) { _tabRequest.value = tab }
+    fun consumeTabRequest() { _tabRequest.value = null }
+
     val connectionState = repo.connectionState
     val zones = repo.zones
     val activeZone = repo.activeZone

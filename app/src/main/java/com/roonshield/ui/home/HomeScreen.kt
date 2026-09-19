@@ -20,7 +20,7 @@ fun HomeScreen(
         style = LibraryStyle.Grid,
         modifier = modifier,
         randomSample = true,
-        sampleSize = 12,
+        sampleSize = 48,
         rootColumns = 4,
     )
 }

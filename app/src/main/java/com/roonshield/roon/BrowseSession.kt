@@ -36,6 +36,22 @@ class BrowseSession(
     suspend fun back(levels: Int = 1): BrowsePage =
         toPage(repo.browse(hierarchy = hierarchy, popLevels = levels, multiSessionKey = key))
 
+    /** Open an item but load only its first [count] rows — a cheap peek (e.g. for cover art),
+     *  where [open] would pull up to 200. Pair with [pop]. */
+    suspend fun peek(itemKey: String, count: Int): BrowsePage {
+        val res = repo.browse(hierarchy = hierarchy, itemKey = itemKey, multiSessionKey = key)
+            ?: return BrowsePage(message = "No response from Core")
+        val level = res.list?.level ?: 0
+        if (res.isError == true || res.action != "list") return BrowsePage(list = res.list, message = res.message, level = level)
+        val items = repo.load(hierarchy = hierarchy, offset = 0, count = count, multiSessionKey = key)?.items ?: emptyList()
+        return BrowsePage(list = res.list, items = items, level = level)
+    }
+
+    /** Pop without reloading the parent level (its already-loaded item keys stay valid). */
+    suspend fun pop(levels: Int = 1) {
+        repo.browse(hierarchy = hierarchy, popLevels = levels, multiSessionKey = key)
+    }
+
     /** Invoke an action item (e.g. "Play Now") that produces no new list. */
     suspend fun invoke(itemKey: String): String? =
         repo.browse(hierarchy = hierarchy, itemKey = itemKey, multiSessionKey = key)?.message

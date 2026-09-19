@@ -56,6 +56,8 @@ import com.roonshield.ui.theme.RoonBackground
 import com.roonshield.ui.theme.RoonSurface
 import com.roonshield.ui.theme.RoonTextPrimary
 import com.roonshield.ui.zones.ZoneOverlay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 private data class NavItem(val id: String, val label: String, val icon: ImageVector)
 
@@ -128,7 +130,9 @@ private fun MainScaffold(viewModel: RoonViewModel) {
     val zones by viewModel.zones.collectAsState()
     val activeZoneId by viewModel.activeZoneId.collectAsState()
     val firstNavFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { firstNavFocus.requestFocus() } }
+    // False only while the first open is deciding between Home and Now Playing (see below).
+    var routed by remember { mutableStateOf(viewModel.initialTab != null) }
+    androidx.compose.runtime.LaunchedEffect(routed) { if (routed) runCatching { firstNavFocus.requestFocus() } }
 
     // Listen Later only appears when the Core actually has the tag.
     val listenLaterAvailable by viewModel.listenLaterAvailable.collectAsState()
@@ -151,6 +155,31 @@ private fun MainScaffold(viewModel: RoonViewModel) {
     fun goNowPlaying() {
         if (selected != "nowplaying") lastTab = selected
         selected = "nowplaying"
+    }
+
+    // Opening the app while music is already playing lands on Now Playing; otherwise the regular
+    // screen. Zone state arrives just after connect, so wait briefly for it behind the splash
+    // rather than flashing Home first. An explicit start_tab deep link always wins.
+    val openEpoch by viewModel.openEpoch.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(openEpoch) {
+        if (viewModel.initialTab != null) {
+            viewModel.initialTab = null // honour the deep link for this open only; later opens route normally
+        } else {
+            val zone = withTimeoutOrNull(1500) { viewModel.activeZone.first { it != null } }
+            if (zone?.isPlaying == true) goNowPlaying()
+        }
+        routed = true
+    }
+    // A start_tab deep link that arrived while already running (onNewIntent).
+    val tabRequest by viewModel.tabRequest.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(tabRequest) {
+        val tab = tabRequest ?: return@LaunchedEffect
+        if (tab == "nowplaying") goNowPlaying() else if (NAV_ITEMS.any { it.id == tab }) selected = tab
+        viewModel.consumeTabRequest()
+    }
+    if (!routed) {
+        BootSplash()
+        return
     }
 
     // Now Playing is a full-screen display: no nav rail, no footer. Back returns to the last tab.

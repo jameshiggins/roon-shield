@@ -24,7 +24,11 @@ import kotlinx.coroutines.withContext
 
 /** In-memory cache of decoded album art, keyed by image_key + requested size. */
 object AlbumArtCache {
-    private val cache = object : LruCache<String, ImageBitmap>(64) {}
+    // Sized in KB of pixels, not entries: a dense grid of 2x2 mosaics shows 70+ small images at
+    // once, which thrashed the old 64-entry cap and refetched art on every scroll.
+    private val cache = object : LruCache<String, ImageBitmap>(96 * 1024) {
+        override fun sizeOf(key: String, value: ImageBitmap) = (value.width * value.height * 4 / 1024).coerceAtLeast(1)
+    }
 
     suspend fun get(
         imageKey: String,

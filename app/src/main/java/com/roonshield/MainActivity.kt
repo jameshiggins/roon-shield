@@ -1,5 +1,6 @@
 package com.roonshield
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -25,6 +26,17 @@ class MainActivity : ComponentActivity() {
                 RoonApp(viewModel)
             }
         }
+    }
+
+    // singleTask: a launch while we're already running lands here instead of onCreate.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra("start_tab")?.let { viewModel.requestTab(it) }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.onAppOpened() // opening the app while music plays lands on Now Playing
     }
 
     override fun onResume() {
