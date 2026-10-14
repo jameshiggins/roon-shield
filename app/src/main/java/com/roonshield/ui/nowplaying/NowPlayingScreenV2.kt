@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -66,6 +67,7 @@ import com.roonshield.ui.theme.RoonAccent
 import com.roonshield.ui.theme.RoonTextPrimary
 import com.roonshield.ui.theme.RoonTextSecondary
 import kotlinx.coroutines.delay
+import kotlin.random.Random
 
 /**
  * Full-screen "display" now playing: the album art fills the full height on the left, and the
@@ -85,6 +87,9 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
     val np = z.nowPlaying
     val lines = np?.threeLine ?: np?.twoLine ?: np?.oneLine
     val settings = z.settings
+    // A different second-hand copy of the sleeve every time this screen opens, and every time the
+    // track changes — see LpSleeveArt.
+    val sleeveSeed = remember(np?.imageKey) { Random.nextLong() }
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(z.zoneId) { runCatching { playFocus.requestFocus() } }
 
@@ -144,16 +149,24 @@ fun NowPlayingScreenV2(viewModel: RoonViewModel, modifier: Modifier = Modifier) 
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // Full-height album art (square) on the left.
+            // Full-height album art (square) on the left, as a used LP sleeve: cardboard corners
+            // and a near-square clip, not a rounded UI card, and no hairline border — the sleeve
+            // paints its own worn cut edges.
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .aspectRatio(1f)
                     .padding(24.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp)),
+                    .shadow(22.dp, RoundedCornerShape(3.dp), clip = false)
+                    .clip(RoundedCornerShape(3.dp)),
             ) {
-                AlbumArt(np?.imageKey, sizePx = 1080, fetch = viewModel::loadArt, modifier = Modifier.fillMaxSize())
+                LpSleeveArt(
+                    imageKey = np?.imageKey,
+                    sizePx = 1080,
+                    seed = sleeveSeed,
+                    fetch = viewModel::loadArt,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
 
             // Remaining space: photo + title + artist grouped top-right (equal photo/title/artist
