@@ -27,3 +27,6 @@ build-*.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Spotify probe tokens (scripts/spotify-check.ps1)
+.spotify-tokens.json
